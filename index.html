@@ -140,7 +140,7 @@ const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 const SUITS=['♠','♥','♦','♣'];
 const RANKNAME={A:'Ace',J:'Jack',Q:'Queen',K:'King'};
 let S=null;                       // game state (plain JSON)
-let ui={card:null,pawn:null,used:0,first:null,turnStart:null,confirmNew:false,moveToken:0,dealt:null,fx:null,winShown:false,err:null,part:null};
+let ui={confirmDiscard:false,card:null,pawn:null,used:0,first:null,turnStart:null,confirmNew:false,moveToken:0,dealt:null,fx:null,winShown:false,err:null,part:null};
 let scores={};                    // wins per player name, kept until the page is refreshed
 let gamesPlayed=0;
 let setup={N:6,persons:['Player 1','Player 2'],seatPerson:[0,0,1,1,1,0],hideCards:true};   // player 1 = top half (Green, Red, White), player 2 = bottom half
@@ -224,7 +224,7 @@ function pawnOptions(st,seat,r,p,used){
   else if(r==='4'){ push(back4(st,p)); }
   else if(r==='7'){
     const rem=7-used;
-    for(let k=1;k<=rem;k++){
+    for(let k=(used>0?rem:1);k<=rem;k++){
       for(const m of fwdBoth(st,p,k)){
         if(k===rem){o.push(m);continue;}
         // the rest must be playable by a *different* pawn afterwards
@@ -307,7 +307,7 @@ function discardAll(voluntary){
    but a playable Jack must be played first */
 function pawnsOnTrack(person){ return S.pawns.filter(p=>S.seatPerson[p.seat]===person&&p.zone==='ring').length; }
 function playableJack(seat){ return S.hands[seat].some(c=>c.r==='J'&&cardPlayable(S,seat,c)); }
-function canVoluntaryDiscard(){ return S.phase==='play'&&ui.card==null&&ui.used===0&&pawnsOnTrack(S.seatPerson[S.turn])<=1&&!playableJack(S.turn); }
+function canVoluntaryDiscard(){ return S.phase==='play'&&ui.card==null&&ui.used===0&&!playableJack(S.turn); }
 function finishMove(desc){
   const card=S.hands[S.turn].splice(ui.card,1)[0];
   S.discard.push(card);
@@ -401,8 +401,8 @@ function clickDest(zone,pos){
 }
 
 /* ---------- persistence ---------- */
-function save(){ try{ localStorage.setItem('keezen-v18',JSON.stringify(S)); }catch(e){} }
-function loadSaved(){ try{ const s=localStorage.getItem('keezen-v18'); return s?JSON.parse(s):null; }catch(e){return null;} }
+function save(){ try{ localStorage.setItem('keezen-v19',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v19'); return s?JSON.parse(s):null; }catch(e){return null;} }
 
 /* ---------- rendering ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -494,8 +494,8 @@ function renderGame(){
       <div id="errbox" class="hint" style="color:#e0202a" ${ui.err?'':'hidden'}>${ui.err?'Something went wrong: '+esc(ui.err)+'. Use "Undo choice" to reset this turn.':''}</div>
       <div class="actions">
         ${S.phase==='nocard'?'<button class="primary" id="discard">Discard cards, next turn</button>':''}
-        ${canVoluntaryDiscard()?'<button id="vdiscard" title="Allowed with at most one pawn on the track">Discard hand, wait for new cards</button>':''}
-        ${S.phase==='play'&&ui.card==null&&pawnsOnTrack(S.seatPerson[S.turn])<=1&&playableJack(S.turn)?'<span class="hint">You hold a playable Jack: play it before you may discard.</span>':''}
+        ${canVoluntaryDiscard()?`<button id="vdiscard" class="${ui.confirmDiscard?'primary':''}">${ui.confirmDiscard?'Sure? Click again to discard':'Discard hand, wait for new cards'}</button>`:''}
+        ${S.phase==='play'&&ui.card==null&&playableJack(S.turn)?'<span class="hint">You hold a playable Jack: you must play it, so no discarding this turn.</span>':''}
         ${S.phase==='moved'?'<button class="primary" id="nextturn">Next player now →</button>':''}
         ${S.phase==='play'&&ui.card!=null&&ui.used>0&&selectablePawns().length===0?'<button class="primary" id="finish7">Finish the seven and end turn</button>':''}
         ${S.phase==='play'&&ui.card!=null?`<button id="cancel">${ui.used>0?'Undo the seven':'Undo choice'}</button>`:''}
@@ -515,21 +515,21 @@ function renderGame(){
         <li>A pawn on its own start blocks: nobody may pass it, land on it or swap with it.</li>
         <li>Landing exactly on a pawn sends it back to the nest (your own pawns included).</li>
         <li>Passing your entry you choose: into home (exact count needed, no overtaking, no moving back) or another lap round the board.</li>
-        <li>You must play if you can. If no card is playable, you discard your whole hand. House rule: with at most one pawn on the track you may discard your hand voluntarily, unless you hold a Jack you can play.</li>
+        <li>House rule: you may always throw your hand away and wait for the next deal, unless you hold a Jack you can play. If no card is playable, the hand goes anyway.</li>
         <li>After a new deal, the player who did not play the last card of the previous round starts.</li>
         <li>Round 1: 5 cards, then 4 and 4, one hand per player. Any card may move any pawn of your colours.</li>
       </ul></details>
     </div></div>`;
   app.querySelectorAll('[data-card]').forEach(b=>b.onclick=()=>selectCard(+b.dataset.card));
   const d=document.getElementById('discard'); if(d)d.onclick=()=>discardAll(false);
-  const vd=document.getElementById('vdiscard'); if(vd)vd.onclick=()=>discardAll(true);
+  const vd=document.getElementById('vdiscard'); if(vd)vd.onclick=()=>{ if(ui.confirmDiscard){ ui.confirmDiscard=false; discardAll(true); } else { ui.confirmDiscard=true; render(); setTimeout(()=>{ if(ui.confirmDiscard){ ui.confirmDiscard=false; if(S)render(); } },4000); } };
   const nt=document.getElementById('nextturn'); if(nt)nt.onclick=nextTurn;
   const f7=document.getElementById('finish7'); if(f7)f7.onclick=()=>{ const part=ui.part||''; ui.part=null; finishMove(part+' (rest of the seven could not be used).'); };
   const rm=document.getElementById('rematch'); if(rm)rm.onclick=rematch;
   const rm2=document.getElementById('rematch2'); if(rm2)rm2.onclick=rematch;
   const cw=document.getElementById('closewin'); if(cw)cw.onclick=()=>{ui.winShown=true;render();};
   const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
-  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v18');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v19');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
   const svg=app.querySelector('svg.board');
   runAnim(svg);
   if(ui.fx&&ui.fx.type==='home'&&GEO){ const fx=ui.fx; ui.fx=null; const [px,py]=GEO.pt(fx.seat,'home',fx.pos,fx.pid);
