@@ -199,7 +199,7 @@ function apply(st,m){
   return n;
 }
 function swapTargets(st,a){
-  if(a.zone!=='ring'||isBlocker(a))return [];
+  if(a.zone!=='ring')return [];
   return st.pawns.filter(b=>st.seatPerson[b.seat]!==st.seatPerson[a.seat]&&b.zone==='ring'&&!isBlocker(b));
 }
 function jackSources(st,seat){ return controlled(st,seat).filter(a=>swapTargets(st,a).length>0); }
@@ -368,7 +368,7 @@ function clickDest(zone,pos){
   const p=byId(S,ui.pawn), r=S.hands[S.turn][ui.card].r;
   const capTxt=m.cap!=null?` and captures ${seatName(byId(S,m.cap).seat)}`:'';
   ui.anim=[{pid:p.id,from:{zone:p.zone,pos:p.pos,seat:p.seat},path:m.path}];
-  if(m.cap!=null){ const c=byId(S,m.cap); ui.anim.push({pid:c.id,from:{zone:c.zone,pos:c.pos,seat:c.seat},path:[{zone:'nest',pos:c.id%4}],delay:m.path.length*55,fade:true}); }
+  if(m.cap!=null){ const c=byId(S,m.cap); ui.anim.push({pid:c.id,from:{zone:c.zone,pos:c.pos,seat:c.seat},path:[{zone:'nest',pos:c.id%4}],delay:m.path.length*55,knock:true}); }
   S=apply(S,m);
   if(r==='7'){
     ui.used+=m.steps;
@@ -385,8 +385,8 @@ function clickDest(zone,pos){
 }
 
 /* ---------- persistence ---------- */
-function save(){ try{ localStorage.setItem('keezen-v11',JSON.stringify(S)); }catch(e){} }
-function loadSaved(){ try{ const s=localStorage.getItem('keezen-v11'); return s?JSON.parse(s):null; }catch(e){return null;} }
+function save(){ try{ localStorage.setItem('keezen-v12',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v12'); return s?JSON.parse(s):null; }catch(e){return null;} }
 
 /* ---------- rendering ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -454,9 +454,9 @@ function renderGame(){
   else if(card.r==='J'&&ui.pawn==null)msg='Jack: click the pawn of yours you want to swap.';
   else if(card.r==='J')msg='Click the pawn to swap with.';
   else if(card.r==='7'&&ui.pawn==null)msg=ui.used?`Seven: ${ui.used} of 7 steps used. Pick a <b>different</b> pawn for the remaining ${7-ui.used}.`:'Seven: pick a pawn. You may use all 7 on one pawn or split them over two.';
-  else if(card.r==='7')msg=`Click the space this pawn moves to; the number is the step count${ui.used?` (${7-ui.used} left)`:''}.`;
+  else if(card.r==='7')msg=`Click the space this pawn moves to; the number is the step count${ui.used?` (${7-ui.used} left)`:''}. Red ring = capture.`;
   else if(ui.pawn==null)msg='Click the pawn you want to move.';
-  else msg='Click the highlighted space to make the move.';
+  else msg='Click the highlighted space to make the move (red ring = capture that pawn).';
 
   app.innerHTML=`<div class="game">
     <div class="boardwrap">${boardSVG()}<div class="wm">brondijk.xyz</div></div>
@@ -488,7 +488,7 @@ function renderGame(){
       <div class="log">${S.log.slice(0,10).map(l=>`<div>${l.seat>=0?`<span class="dot" style="background:${SEATS[l.seat].c}"></span>`:''}<span>${esc(l.text)}</span></div>`).join('')||'<span class="hint">No moves yet.</span>'}</div>
       <details><summary>Rules in short</summary><ul>
         <li>Ace: pawn onto start or 1 forward. King: pawn onto start. Queen: 12 forward.</li>
-        <li>Jack: swap one of your pawns with a pawn of another colour. Never a pawn standing on its own start.</li>
+        <li>Jack: swap one of your pawns (even one on your own start) with an opponent's pawn. An opponent standing on their own start can't be taken.</li>
         <li>7: seven steps in total, split over one or two pawns. All seven must be used.</li>
         <li>4: four steps back (never into home). 2, 3, 5, 6, 8, 9, 10: that many forward.</li>
         <li>A pawn on its own start blocks: nobody may pass it, land on it or swap with it.</li>
@@ -503,17 +503,25 @@ function renderGame(){
   const nt=document.getElementById('nextturn'); if(nt)nt.onclick=nextTurn;
   const rm=document.getElementById('rematch'); if(rm)rm.onclick=rematch;
   const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
-  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v11');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v12');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
   const svg=app.querySelector('svg.board');
   runAnim(svg);
   svg.addEventListener('click',e=>{
-    const pw=e.target.closest('[data-pid]'); if(pw){clickPawn(+pw.dataset.pid);return;}
+    const pw=e.target.closest('[data-pid]');
+    if(pw){
+      const id=+pw.dataset.pid;
+      if(!selectablePawns().includes(id)&&ui.pawn!=null){
+        const t=byId(S,id); const o=currentOptions().find(o=>o.to.zone===t.zone&&o.to.pos===t.pos&&(t.zone!=='home'||t.seat===byId(S,ui.pawn).seat));
+        if(o){clickDest(o.to.zone,o.to.pos);return;}
+      }
+      clickPawn(id);return;
+    }
     const f=e.target.closest('[data-dz]'); if(f){clickDest(f.dataset.dz,+f.dataset.dp);}
   });
 }
 function cardHelp(r){
   return {A:'Ace: put a pawn on your start or move 1 forward.',K:'King: move a pawn from the nest onto your start.',Q:'Queen: 12 steps forward.',
-    J:'Jack: swap one of your pawns with a pawn of another colour (not from or onto an own start).',
+    J:'Jack: swap one of your pawns with an opponent pawn. Opponents on their own start are safe.',
     7:'Seven: 7 steps, split over one or two pawns.',4:'Four: 4 steps back.'}[r]||`${r} steps forward.`;
 }
 
@@ -622,17 +630,24 @@ function runAnim(svg){
     const pawn=byId(S,a.pid);
     const end=GEO.pt(pawn.seat,pawn.zone,pawn.pos,pawn.id);
     const pts=[GEO.pt(a.from.seat,a.from.zone,a.from.pos,a.pid),...a.path.map(w=>GEO.pt(pawn.seat,w.zone,w.pos,a.pid))];
-    const hop=a.path.length>1?Math.max(28,Math.min(70,700/a.path.length)):180;
+    const hop=a.knock?420:a.path.length>1?Math.max(28,Math.min(70,700/a.path.length)):180;
+    const knockMs=a.knock?260:0;
     const t0=performance.now()+(a.delay||0);
     g.setAttribute('transform',`translate(${(pts[0][0]-end[0]).toFixed(1)} ${(pts[0][1]-end[1]).toFixed(1)})`);
     const frame=now=>{
-      if(ui.anim!==null&&false)return;
-      const t=Math.max(0,now-t0)/hop; const i=Math.min(pts.length-1,Math.floor(t)); const f=Math.min(1,t-i);
+      let el=Math.max(0,now-t0);
+      if(a.knock&&el<knockMs){ // topple on the spot first
+        const k=el/knockMs, rot=Math.sin(k*Math.PI)*70;
+        g.setAttribute('transform',`translate(${(pts[0][0]-end[0]).toFixed(1)} ${(pts[0][1]-end[1]).toFixed(1)}) rotate(${rot.toFixed(1)} ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)})`);
+        requestAnimationFrame(frame); return;
+      }
+      el-=knockMs;
+      const t=el/hop; const i=Math.min(pts.length-1,Math.floor(t)); const f=Math.min(1,t-i);
       if(i>=pts.length-1){ g.removeAttribute('transform'); g.style.opacity=''; return; }
       const x=pts[i][0]+(pts[i+1][0]-pts[i][0])*f, y=pts[i][1]+(pts[i+1][1]-pts[i][1])*f;
-      const lift=Math.sin(f*Math.PI)*(a.path.length>1?4:10);
+      const lift=Math.sin(f*Math.PI)*(a.path.length>1?4:(a.knock?40:10));
       g.setAttribute('transform',`translate(${(x-end[0]).toFixed(1)} ${(y-end[1]-lift).toFixed(1)})`);
-      if(a.fade)g.style.opacity=String(0.35+0.65*f);
+      if(a.knock)g.style.opacity=String(0.5+0.5*f);
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
