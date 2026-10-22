@@ -23,7 +23,7 @@
 
 html,body{height:100%}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45;
-  padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
 button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:8px 14px}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -45,16 +45,16 @@ legend{font-family:var(--display);font-weight:700;padding:0 6px}
 .dot{width:14px;height:14px;border-radius:50%;display:inline-block;border:2px solid rgba(255,255,255,.7);box-shadow:0 0 0 1px rgba(0,0,0,.25)}
 
 /* Game */
-.game{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+.game{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
 @media (max-width:860px){.game{grid-template-columns:1fr}}
-.boardwrap{width:min(100%,calc(100vh - 60px));max-width:100%;margin:0 auto}
+.boardwrap{width:min(100%,calc(100vh - 36px));max-width:100%;margin:0 auto}
 .winner{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--surface);color:var(--fg);border:3px solid var(--accent);border-radius:18px;padding:22px 34px;text-align:center;display:grid;gap:8px;box-shadow:0 20px 60px rgba(0,0,0,.45);min-width:min(320px,80%)}
 .winner .wname{font-family:var(--display);font-size:clamp(34px,6vw,60px);font-weight:800;line-height:1;color:var(--accent)}
 .winner .wsub{color:var(--muted);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:no-preference){.winner{animation:pop .45s cubic-bezier(.2,1.4,.4,1) both} .boardwrap.shake{animation:shake .45s linear}}
 @keyframes shake{0%,100%{transform:none}15%{transform:translate(-6px,3px) rotate(-.6deg)}30%{transform:translate(5px,-4px) rotate(.5deg)}45%{transform:translate(-4px,2px)}60%{transform:translate(3px,-2px) rotate(-.3deg)}75%{transform:translate(-2px,1px)}}
 @keyframes pop{from{transform:translate(-50%,-50%) scale(.6);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
-.wm{text-align:center;font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:8px;opacity:.7}
+.wm{text-align:center;font-family:var(--display);font-weight:600;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:4px;opacity:.6}
 svg.board{width:100%;height:auto;aspect-ratio:1;display:block;overflow:visible}
 .dest{cursor:pointer}
 .hl{fill:none;stroke:#ff8a00;stroke-width:4;pointer-events:none}
@@ -551,7 +551,7 @@ function cardHelp(r){
 /* geometry: Dutch tea-towel board, white dots on blue check, Delft-blue centre */
 let GEO=null;
 function boardSVG(){
-  const VB=1000,C=500,R=312,A=20, ring=S.ring;
+  const VB=1000,C=500,R=346,A=20, ring=S.ring;
   const rfScale=1.12;
   const ang=pos=>(pos/ring)*Math.PI*2-Math.PI/2;
   const wave=a=>R+A*Math.cos(S.N*(a+Math.PI/2));      // bulges outward at every start
@@ -605,8 +605,11 @@ function boardSVG(){
     }
     { // label plate above the nest for the upper seats, below it for the lower ones
       const a=ang(start(s)), [ncx,ncy]=xy(wave(a)+61,a);
-      const above=Math.sin(a)<0.01; const ly=ncy+(above?-66:66), lx=ncx;
       const name=personOf(S,s); const w=Math.max(SEATS[s].n.length*10,name.length*8.5)+22;
+      const vertical=Math.abs(Math.cos(a))<0.2;            // top and bottom seats: plate beside the nest
+      let lx,ly;
+      if(vertical){ lx=ncx+54+w/2; ly=ncy; }
+      else { const above=Math.sin(a)<0; ly=ncy+(above?-66:66); lx=ncx; }
       out+=`<g filter="url(#soft)"><rect x="${f(lx-w/2)}" y="${f(ly-20)}" width="${f(w)}" height="40" rx="8" fill="rgba(255,255,255,.92)" stroke="${SEATS[s].r}" stroke-width="2"/>
         <text x="${f(lx)}" y="${f(ly-4)}" text-anchor="middle" font-family="var(--display)" font-weight="800" font-size="15" fill="#0b3560">${SEATS[s].n}</text>
         <text x="${f(lx)}" y="${f(ly+13)}" text-anchor="middle" font-family="var(--body)" font-weight="600" font-size="13" fill="#2a4f78">${esc(name)}</text></g>`;
