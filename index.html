@@ -292,12 +292,17 @@ function switchSeat(s){
   if(S.phase!=='play'||ui.card!=null||S.seatPerson[s]!==S.seatPerson[S.turn]||!S.hands[s].length)return;
   S.turn=s; ui.turnStart=clone(S); save(); render();
 }
-function discardAll(){
+function discardAll(voluntary){
   const person=S.seatPerson[S.turn]; let n=0;
   for(const s of seatsOf(person)){ n+=S.hands[s].length; S.discard.push(...S.hands[s]); S.hands[s]=[]; }
-  log(S.turn,`${personOf(S,S.turn)} has no move and discards ${n} card${n===1?'':'s'}.`);
+  log(S.turn,voluntary?`${personOf(S,S.turn)} chooses to discard ${n} card${n===1?'':'s'} and waits for a new hand.`:`${personOf(S,S.turn)} has no move and discards ${n} card${n===1?'':'s'}.`);
   nextTurn();
 }
+/* house rule: with at most one pawn on the track you may throw your hand away instead of running laps,
+   but a playable Jack must be played first */
+function pawnsOnTrack(person){ return S.pawns.filter(p=>S.seatPerson[p.seat]===person&&p.zone==='ring').length; }
+function playableJack(seat){ return S.hands[seat].some(c=>c.r==='J'&&cardPlayable(S,seat,c)); }
+function canVoluntaryDiscard(){ return S.phase==='play'&&ui.card==null&&ui.used===0&&pawnsOnTrack(S.seatPerson[S.turn])<=1&&!playableJack(S.turn); }
 function finishMove(desc){
   const card=S.hands[S.turn].splice(ui.card,1)[0];
   S.discard.push(card);
@@ -320,7 +325,7 @@ function nextTurn(){
   for(let i=1;i<=P;i++){ const q=(cur+i)%P; const seat=seatsOf(q).find(s=>S.hands[s].length); if(seat!=null){n=seat;break;} }
   if(n==null){
     deal();
-    S.roundStarter=(S.roundStarter+1)%P;          // the other player opens the next round
+    S.roundStarter=(cur+1)%P;                     // whoever did not play the last card opens the next round
     n=firstSeatWithCards(S.roundStarter);
     log(-1,`New round: ${S.hands[n].length} cards each. ${S.persons[S.roundStarter]} starts.`);
   }
@@ -391,8 +396,8 @@ function clickDest(zone,pos){
 }
 
 /* ---------- persistence ---------- */
-function save(){ try{ localStorage.setItem('keezen-v13',JSON.stringify(S)); }catch(e){} }
-function loadSaved(){ try{ const s=localStorage.getItem('keezen-v13'); return s?JSON.parse(s):null; }catch(e){return null;} }
+function save(){ try{ localStorage.setItem('keezen-v14',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v14'); return s?JSON.parse(s):null; }catch(e){return null;} }
 
 /* ---------- rendering ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -483,6 +488,8 @@ function renderGame(){
       </div>
       <div class="actions">
         ${S.phase==='nocard'?'<button class="primary" id="discard">Discard cards, next turn</button>':''}
+        ${canVoluntaryDiscard()?'<button id="vdiscard" title="Allowed with at most one pawn on the track">Discard hand, wait for new cards</button>':''}
+        ${S.phase==='play'&&ui.card==null&&pawnsOnTrack(S.seatPerson[S.turn])<=1&&playableJack(S.turn)?'<span class="hint">You hold a playable Jack: play it before you may discard.</span>':''}
         ${S.phase==='moved'?'<button class="primary" id="nextturn">Next player now →</button>':''}
         ${S.phase==='play'&&ui.card!=null?'<button id="cancel">Undo choice</button>':''}
         ${S.phase==='over'?'<button class="primary" id="rematch">Rematch (same players)</button><button id="newgame">New setup</button>':`<button class="ghost" id="newgame">${ui.confirmNew?'Sure? Click again':'New game'}</button>`}
@@ -501,18 +508,20 @@ function renderGame(){
         <li>A pawn on its own start blocks: nobody may pass it, land on it or swap with it.</li>
         <li>Landing exactly on a pawn sends it back to the nest (your own pawns included).</li>
         <li>Passing your entry you choose: into home (exact count needed, no overtaking, no moving back) or another lap round the board.</li>
-        <li>You must play if you can. If no card is playable, you discard your whole hand.</li>
+        <li>You must play if you can. If no card is playable, you discard your whole hand. House rule: with at most one pawn on the track you may discard your hand voluntarily, unless you hold a Jack you can play.</li>
+        <li>After a new deal, the player who did not play the last card of the previous round starts.</li>
         <li>Round 1: 5 cards, then 4 and 4, one hand per player. Any card may move any pawn of your colours.</li>
       </ul></details>
     </div></div>`;
   app.querySelectorAll('[data-card]').forEach(b=>b.onclick=()=>selectCard(+b.dataset.card));
-  const d=document.getElementById('discard'); if(d)d.onclick=discardAll;
+  const d=document.getElementById('discard'); if(d)d.onclick=()=>discardAll(false);
+  const vd=document.getElementById('vdiscard'); if(vd)vd.onclick=()=>discardAll(true);
   const nt=document.getElementById('nextturn'); if(nt)nt.onclick=nextTurn;
   const rm=document.getElementById('rematch'); if(rm)rm.onclick=rematch;
   const rm2=document.getElementById('rematch2'); if(rm2)rm2.onclick=rematch;
   const cw=document.getElementById('closewin'); if(cw)cw.onclick=()=>{ui.winShown=true;render();};
   const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
-  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v13');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v14');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
   const svg=app.querySelector('svg.board');
   runAnim(svg);
   if(ui.fx&&ui.fx.type==='home'&&GEO){ const fx=ui.fx; ui.fx=null; const [px,py]=GEO.pt(fx.seat,'home',fx.pos,fx.pid);
