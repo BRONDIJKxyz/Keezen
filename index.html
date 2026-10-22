@@ -575,8 +575,14 @@ function boardSVG(){
       const [nx,ny]=nestXY(s,i);
       out+=dot(nx,ny,rf*0.8,SEATS[s].r,'filter="url(#soft)"');
     }
-    const [lx,ly]=xy(wave(ang(start(s)))+106,ang(start(s)));
-    out+=`<text x="${f(lx)}" y="${f(ly)}" text-anchor="middle" dominant-baseline="middle" font-family="var(--display)" font-weight="700" font-size="14" fill="#0b3560" stroke="#fff" stroke-width="3" paint-order="stroke">${SEATS[s].n} <tspan font-weight="500" fill="#3a5f88">(${esc(personOf(S,s))})</tspan></text>`;
+    { // label plate above the nest for the upper seats, below it for the lower ones
+      const a=ang(start(s)), [ncx,ncy]=xy(wave(a)+61,a);
+      const above=Math.sin(a)<0.01; const ly=ncy+(above?-52:52), lx=ncx;
+      const name=personOf(S,s); const w=Math.max(SEATS[s].n.length*10,name.length*8.5)+22;
+      out+=`<g filter="url(#soft)"><rect x="${f(lx-w/2)}" y="${f(ly-21)}" width="${f(w)}" height="42" rx="8" fill="rgba(255,255,255,.92)" stroke="${SEATS[s].r}" stroke-width="2"/>
+        <text x="${f(lx)}" y="${f(ly-4)}" text-anchor="middle" font-family="var(--display)" font-weight="800" font-size="15" fill="#0b3560">${SEATS[s].n}</text>
+        <text x="${f(lx)}" y="${f(ly+13)}" text-anchor="middle" font-family="var(--body)" font-weight="600" font-size="13" fill="#2a4f78">${esc(name)}</text></g>`;
+    }
   }
   // pawns (3D discs)
   for(const p of S.pawns){
