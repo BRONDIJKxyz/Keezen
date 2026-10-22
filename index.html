@@ -131,7 +131,7 @@ let S=null;                       // game state (plain JSON)
 let ui={card:null,pawn:null,used:0,first:null,turnStart:null,confirmNew:false,moveToken:0,dealt:null};
 let scores={};                    // wins per player name, kept until the page is refreshed
 let gamesPlayed=0;
-let setup={N:6,persons:['Player 1','Player 2'],seatPerson:[0,1,0,1,0,1]};
+let setup={N:6,persons:['Player 1','Player 2'],seatPerson:[0,0,1,1,1,0]};   // player 1 = top half (Green, Red, White), player 2 = bottom half
 const app=document.getElementById('app');
 
 /* ---------- helpers ---------- */
@@ -414,7 +414,7 @@ function renderSetup(){
   document.getElementById('startBtn').onclick=()=>{ app.querySelectorAll('#persons input').forEach(inp=>{setup.persons[+inp.dataset.i]=inp.value.trim()||`Player ${+inp.dataset.i+1}`;}); newGame(setup); };
   const res=document.getElementById('resume'); if(res)res.onclick=()=>{S=saved; if(S.phase==='play'||S.phase==='nocard'){S.phase='play';startPlay();} else if(S.phase==='moved'){nextTurn();return;} render();};
 }
-function normalizeAssign(){ for(let s=0;s<6;s++){ if(setup.seatPerson[s]==null||setup.seatPerson[s]>=setup.persons.length)setup.seatPerson[s]=s%setup.persons.length; } }
+function normalizeAssign(){ const top=[0,0,1,1,1,0]; for(let s=0;s<6;s++){ if(setup.seatPerson[s]==null||setup.seatPerson[s]>=setup.persons.length)setup.seatPerson[s]=setup.persons.length===2?top[s]:s%setup.persons.length; } }
 
 function renderGame(){
   const seat=S.turn, person=personOf(S,seat);
