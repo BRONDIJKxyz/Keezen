@@ -523,7 +523,7 @@ function cardHelp(r){
 /* geometry: Dutch tea-towel board, white dots on blue check, Delft-blue centre */
 let GEO=null;
 function boardSVG(){
-  const VB=1000,C=500,R=352,A=20, ring=S.ring;
+  const VB=1000,C=500,R=322,A=20, ring=S.ring;
   const rfScale=1.12;
   const ang=pos=>(pos/ring)*Math.PI*2-Math.PI/2;
   const wave=a=>R+A*Math.cos(S.N*(a+Math.PI/2));      // bulges outward at every start
@@ -577,9 +577,9 @@ function boardSVG(){
     }
     { // label plate above the nest for the upper seats, below it for the lower ones
       const a=ang(start(s)), [ncx,ncy]=xy(wave(a)+61,a);
-      const above=Math.sin(a)<0.01; const ly=ncy+(above?-52:52), lx=ncx;
+      const above=Math.sin(a)<0.01; const ly=ncy+(above?-50:50), lx=ncx;
       const name=personOf(S,s); const w=Math.max(SEATS[s].n.length*10,name.length*8.5)+22;
-      out+=`<g filter="url(#soft)"><rect x="${f(lx-w/2)}" y="${f(ly-21)}" width="${f(w)}" height="42" rx="8" fill="rgba(255,255,255,.92)" stroke="${SEATS[s].r}" stroke-width="2"/>
+      out+=`<g filter="url(#soft)"><rect x="${f(lx-w/2)}" y="${f(ly-20)}" width="${f(w)}" height="40" rx="8" fill="rgba(255,255,255,.92)" stroke="${SEATS[s].r}" stroke-width="2"/>
         <text x="${f(lx)}" y="${f(ly-4)}" text-anchor="middle" font-family="var(--display)" font-weight="800" font-size="15" fill="#0b3560">${SEATS[s].n}</text>
         <text x="${f(lx)}" y="${f(ly+13)}" text-anchor="middle" font-family="var(--body)" font-weight="600" font-size="13" fill="#2a4f78">${esc(name)}</text></g>`;
     }
