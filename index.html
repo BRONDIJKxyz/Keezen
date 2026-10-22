@@ -140,7 +140,7 @@ const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 const SUITS=['♠','♥','♦','♣'];
 const RANKNAME={A:'Ace',J:'Jack',Q:'Queen',K:'King'};
 let S=null;                       // game state (plain JSON)
-let ui={card:null,pawn:null,used:0,first:null,turnStart:null,confirmNew:false,moveToken:0,dealt:null,fx:null,winShown:false};
+let ui={card:null,pawn:null,used:0,first:null,turnStart:null,confirmNew:false,moveToken:0,dealt:null,fx:null,winShown:false,err:null,part:null};
 let scores={};                    // wins per player name, kept until the page is refreshed
 let gamesPlayed=0;
 let setup={N:6,persons:['Player 1','Player 2'],seatPerson:[0,0,1,1,1,0],hideCards:true};   // player 1 = top half (Green, Red, White), player 2 = bottom half
@@ -340,7 +340,7 @@ function fmtDur(ms){const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floo
 function rematch(){ ui.winShown=false; const cfg={N:S.N,persons:S.persons,seatPerson:S.seatPerson,starter:(S.firstStarter+1)%S.persons.length,hideCards:S.hideCards}; newGame(cfg); }
 setInterval(()=>{const el=document.getElementById('clock'); if(el&&S&&!S.endedAt)el.textContent=fmtDur(Date.now()-S.startedAt);},1000);
 function cardLabel(c){ return (RANKNAME[c.r]||c.r)+c.s; }
-function cancelChoice(){ if(ui.turnStart){ const ts=ui.turnStart; S=clone(ts); ui.turnStart=ts; } ui.card=null;ui.pawn=null;ui.used=0;ui.first=null; render(); }
+function cancelChoice(){ ui.err=null; if(ui.turnStart){ const ts=ui.turnStart; S=clone(ts); ui.turnStart=ts; } ui.card=null;ui.pawn=null;ui.used=0;ui.first=null; render(); }
 
 /* ---------- interaction ---------- */
 function selectCard(i){
@@ -401,8 +401,8 @@ function clickDest(zone,pos){
 }
 
 /* ---------- persistence ---------- */
-function save(){ try{ localStorage.setItem('keezen-v17',JSON.stringify(S)); }catch(e){} }
-function loadSaved(){ try{ const s=localStorage.getItem('keezen-v17'); return s?JSON.parse(s):null; }catch(e){return null;} }
+function save(){ try{ localStorage.setItem('keezen-v18',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v18'); return s?JSON.parse(s):null; }catch(e){return null;} }
 
 /* ---------- rendering ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -491,12 +491,14 @@ function renderGame(){
           return `<button class="card ${c.s==='♥'||c.s==='♦'?'r':'b'} ${ok?'playable':''} ${ui.card===i?'sel':''} ${dealAnim?'deal':''}" style="${dealAnim?`animation-delay:${i*110}ms`:''}" data-card="${i}" ${ok?'':'disabled'} title="${esc(cardHelp(c.r))}"><span class="corner">${c.r}</span>${c.r}<span class="suit">${c.s}</span></button>`;}).join('')}</div>
         ${card?`<div class="hint" style="margin-top:6px">${esc(cardHelp(card.r))}</div>`:''}
       </div>
+      <div id="errbox" class="hint" style="color:#e0202a" ${ui.err?'':'hidden'}>${ui.err?'Something went wrong: '+esc(ui.err)+'. Use "Undo choice" to reset this turn.':''}</div>
       <div class="actions">
         ${S.phase==='nocard'?'<button class="primary" id="discard">Discard cards, next turn</button>':''}
         ${canVoluntaryDiscard()?'<button id="vdiscard" title="Allowed with at most one pawn on the track">Discard hand, wait for new cards</button>':''}
         ${S.phase==='play'&&ui.card==null&&pawnsOnTrack(S.seatPerson[S.turn])<=1&&playableJack(S.turn)?'<span class="hint">You hold a playable Jack: play it before you may discard.</span>':''}
         ${S.phase==='moved'?'<button class="primary" id="nextturn">Next player now →</button>':''}
-        ${S.phase==='play'&&ui.card!=null?'<button id="cancel">Undo choice</button>':''}
+        ${S.phase==='play'&&ui.card!=null&&ui.used>0&&selectablePawns().length===0?'<button class="primary" id="finish7">Finish the seven and end turn</button>':''}
+        ${S.phase==='play'&&ui.card!=null?`<button id="cancel">${ui.used>0?'Undo the seven':'Undo choice'}</button>`:''}
         ${S.phase==='over'?'<button class="primary" id="rematch">Rematch (same players)</button><button id="newgame">New setup</button>':`<button class="ghost" id="newgame">${ui.confirmNew?'Sure? Click again':'New game'}</button>`}
       </div>
       <div class="standings">${S.persons.map((name,pi)=>{
@@ -522,11 +524,12 @@ function renderGame(){
   const d=document.getElementById('discard'); if(d)d.onclick=()=>discardAll(false);
   const vd=document.getElementById('vdiscard'); if(vd)vd.onclick=()=>discardAll(true);
   const nt=document.getElementById('nextturn'); if(nt)nt.onclick=nextTurn;
+  const f7=document.getElementById('finish7'); if(f7)f7.onclick=()=>{ const part=ui.part||''; ui.part=null; finishMove(part+' (rest of the seven could not be used).'); };
   const rm=document.getElementById('rematch'); if(rm)rm.onclick=rematch;
   const rm2=document.getElementById('rematch2'); if(rm2)rm2.onclick=rematch;
   const cw=document.getElementById('closewin'); if(cw)cw.onclick=()=>{ui.winShown=true;render();};
   const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
-  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v17');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v18');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
   const svg=app.querySelector('svg.board');
   runAnim(svg);
   if(ui.fx&&ui.fx.type==='home'&&GEO){ const fx=ui.fx; ui.fx=null; const [px,py]=GEO.pt(fx.seat,'home',fx.pos,fx.pid);
@@ -754,9 +757,12 @@ function bigConfetti(){
 }
 /* boot */
 function boot(data){
-  if(data&&data.S){S=data.S;ui=Object.assign(ui,data.ui||{});}
+  if(data&&data.S){S=data.S;ui=Object.assign(ui,data.ui||{});ui.anim=null;ui.fx=null;}
+  if(S&&S.phase==='moved'){ const token=++ui.moveToken; setTimeout(()=>{ if(S&&S.phase==='moved'&&ui.moveToken===token)nextTurn(); },1500); }
+  if(S&&S.phase==='play'&&ui.card!=null&&!(S.hands[S.turn]||[])[ui.card]){ ui.card=null;ui.pawn=null;ui.used=0;ui.first=null; }
   normalizeAssign(); render();
 }
+window.addEventListener('error',e=>{ ui.err=(e.message||'error'); try{ const el=document.getElementById('errbox'); if(el){el.hidden=false; el.textContent='Something went wrong: '+ui.err+'. Use "Undo choice" to reset this turn.';} }catch(x){} });
 if(window.claude&&window.claude.hot){
   try{ window.claude.hot.snapshot(()=>({S,ui})); }catch(e){}
   if(window.claude.hot.ready) window.claude.hot.ready(boot); else boot(window.claude.hot.data||{});
