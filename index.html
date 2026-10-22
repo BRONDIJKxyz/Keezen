@@ -72,6 +72,7 @@ svg.board{width:100%;height:auto;aspect-ratio:1;display:block;overflow:visible}
 .meta .score b{color:var(--fg);font-size:15px}
 .meta .sep{margin:0 2px}
 .msg.strong{color:var(--fg);font-weight:500}
+.msg .next{display:block;color:var(--accent);font-weight:600;margin-top:2px}
 .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .tab{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:13px}
 .tab.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);font-weight:600}
@@ -83,6 +84,10 @@ svg.board{width:100%;height:auto;aspect-ratio:1;display:block;overflow:visible}
 .card .suit{font-size:26px;line-height:1}
 .card.r{color:var(--red)} .card.b{color:var(--black)}
 .card.playable:hover{transform:translateY(-4px)}
+@media (prefers-reduced-motion:no-preference){
+  .card.deal{animation:dealin .55s cubic-bezier(.2,.8,.3,1) both}
+  @keyframes dealin{0%{opacity:0;transform:translate(-40px,-70px) rotate(-18deg) scale(.6)}60%{opacity:1;transform:translate(0,-6px) rotate(3deg) scale(1.04)}100%{transform:none}}
+}
 .card.sel{outline:3px solid var(--accent);outline-offset:1px;transform:translateY(-6px)}
 .card:disabled{opacity:.35}
 .hint{font-size:13px;color:var(--muted)}
@@ -119,7 +124,7 @@ const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 const SUITS=['♠','♥','♦','♣'];
 const RANKNAME={A:'Ace',J:'Jack',Q:'Queen',K:'King'};
 let S=null;                       // game state (plain JSON)
-let ui={card:null,pawn:null,used:0,first:null,turnStart:null,confirmNew:false};
+let ui={card:null,pawn:null,used:0,first:null,turnStart:null,confirmNew:false,moveToken:0,dealt:null};
 let scores={};                    // wins per player name, kept until the page is refreshed
 let gamesPlayed=0;
 let setup={N:6,persons:['Player 1','Player 2'],seatPerson:[0,1,0,1,0,1]};
@@ -289,8 +294,16 @@ function finishMove(desc){
   ui.card=null;ui.pawn=null;ui.used=0;ui.first=null;
   if(personWon(S,S.turn)){ S.phase='over'; S.winner=S.seatPerson[S.turn]; S.endedAt=Date.now(); const w=personOf(S,S.turn); scores[w]=(scores[w]||0)+1; gamesPlayed++; log(-1,`${w} wins after ${fmtDur(S.endedAt-S.startedAt)}!`); save();render();return; }
   S.phase='moved'; S.msg=`${cardLabel(card)}: ${desc}`; save(); render();
+  const token=++ui.moveToken;
+  setTimeout(()=>{ if(S&&S.phase==='moved'&&ui.moveToken===token)nextTurn(); },2400);
+}
+function nextPersonName(){
+  const P=S.persons.length, cur=S.seatPerson[S.turn];
+  for(let i=1;i<=P;i++){ const q=(cur+i)%P; if(seatsOf(q).some(s=>S.hands[s].length))return S.persons[q]; }
+  return null;
 }
 function nextTurn(){
+  ui.moveToken++;
   const P=S.persons.length, cur=S.seatPerson[S.turn];
   let n=null;
   for(let i=1;i<=P;i++){ const q=(cur+i)%P; const seat=seatsOf(q).find(s=>S.hands[s].length); if(seat!=null){n=seat;break;} }
@@ -363,8 +376,8 @@ function clickDest(zone,pos){
 }
 
 /* ---------- persistence ---------- */
-function save(){ try{ localStorage.setItem('keezen-v6',JSON.stringify(S)); }catch(e){} }
-function loadSaved(){ try{ const s=localStorage.getItem('keezen-v6'); return s?JSON.parse(s):null; }catch(e){return null;} }
+function save(){ try{ localStorage.setItem('keezen-v7',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v7'); return s?JSON.parse(s):null; }catch(e){return null;} }
 
 /* ---------- rendering ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -412,10 +425,13 @@ function renderGame(){
   }
   const hand=S.hands[seat]||[];
   const card=ui.card!=null?hand[ui.card]:null;
+  const dealKey=S.dealNo+':'+seat;
+  const dealAnim=S.phase==='play'&&ui.dealt!==dealKey&&hand.length===[5,4,4][(S.dealNo-1)%3];
+  if(S.phase==='play')ui.dealt=dealKey;
   let msg='',strong=false;
   if(S.phase==='over')msg=`${esc(S.persons[S.winner])} wins! Game time ${fmtDur(S.endedAt-S.startedAt)}.`,strong=true;
   else if(S.phase==='nocard')msg='None of your colours has a playable card. By the rules you discard all your cards.',strong=true;
-  else if(S.phase==='moved')msg=`Played ${esc(S.msg)}`,strong=true;
+  else if(S.phase==='moved'){ const nx=nextPersonName(); msg=`Played ${esc(S.msg)}${nx?` <span class="next">→ ${esc(nx)} is next</span>`:''}`; strong=true; }
   else if(!card)msg='Pick a card you can play.';
   else if(card.r==='J'&&ui.pawn==null)msg='Jack: click the pawn of yours you want to swap.';
   else if(card.r==='J')msg='Click the pawn to swap with.';
@@ -438,12 +454,12 @@ function renderGame(){
         <div class="eyebrow" style="margin-bottom:6px">${SEATS[seat].n}\u2019s cards</div>
         <div class="hand">${hand.map((c,i)=>{
           const ok=S.phase==='play'&&cardPlayable(S,seat,c);
-          return `<button class="card ${c.s==='♥'||c.s==='♦'?'r':'b'} ${ok?'playable':''} ${ui.card===i?'sel':''}" data-card="${i}" ${ok?'':'disabled'} title="${esc(cardHelp(c.r))}"><span class="corner">${c.r}</span>${c.r}<span class="suit">${c.s}</span></button>`;}).join('')}</div>
+          return `<button class="card ${c.s==='♥'||c.s==='♦'?'r':'b'} ${ok?'playable':''} ${ui.card===i?'sel':''} ${dealAnim?'deal':''}" style="${dealAnim?`animation-delay:${i*110}ms`:''}" data-card="${i}" ${ok?'':'disabled'} title="${esc(cardHelp(c.r))}"><span class="corner">${c.r}</span>${c.r}<span class="suit">${c.s}</span></button>`;}).join('')}</div>
         ${card?`<div class="hint" style="margin-top:6px">${esc(cardHelp(card.r))}</div>`:''}
       </div>
       <div class="actions">
         ${S.phase==='nocard'?'<button class="primary" id="discard">Discard cards, next turn</button>':''}
-        ${S.phase==='moved'?'<button class="primary" id="nextturn">Next player →</button>':''}
+        ${S.phase==='moved'?'<button class="primary" id="nextturn">Next player now →</button>':''}
         ${S.phase==='play'&&ui.card!=null?'<button id="cancel">Undo choice</button>':''}
         ${S.phase==='over'?'<button class="primary" id="rematch">Rematch (same players)</button><button id="newgame">New setup</button>':`<button class="ghost" id="newgame">${ui.confirmNew?'Sure? Click again':'New game'}</button>`}
       </div>
@@ -467,7 +483,7 @@ function renderGame(){
   const nt=document.getElementById('nextturn'); if(nt)nt.onclick=nextTurn;
   const rm=document.getElementById('rematch'); if(rm)rm.onclick=rematch;
   const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
-  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v6');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v7');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
   const svg=app.querySelector('svg.board');
   svg.addEventListener('click',e=>{
     const pw=e.target.closest('[data-pid]'); if(pw){clickPawn(+pw.dataset.pid);return;}
