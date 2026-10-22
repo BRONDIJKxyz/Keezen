@@ -576,7 +576,7 @@ function boardSVG(){
       out+=dot(nx,ny,rf*0.8,SEATS[s].r,'filter="url(#soft)"');
     }
     const [lx,ly]=xy(wave(ang(start(s)))+106,ang(start(s)));
-    out+=`<text x="${f(lx)}" y="${f(ly)}" text-anchor="middle" dominant-baseline="middle" font-family="var(--display)" font-weight="700" font-size="14" fill="#0b3560" stroke="#fff" stroke-width="3" paint-order="stroke">${SEATS[s].n}</text>`;
+    out+=`<text x="${f(lx)}" y="${f(ly)}" text-anchor="middle" dominant-baseline="middle" font-family="var(--display)" font-weight="700" font-size="14" fill="#0b3560" stroke="#fff" stroke-width="3" paint-order="stroke">${SEATS[s].n} <tspan font-weight="500" fill="#3a5f88">(${esc(personOf(S,s))})</tspan></text>`;
   }
   // pawns (3D discs)
   for(const p of S.pawns){
