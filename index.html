@@ -482,15 +482,16 @@ function cardHelp(r){
 
 /* geometry: Dutch tea-towel board, white dots on blue check, Delft-blue centre */
 function boardSVG(){
-  const VB=1000,C=500,R=385,A=22, ring=S.ring;
+  const VB=1000,C=500,R=352,A=20, ring=S.ring;
   const rfScale=1.12;
   const ang=pos=>(pos/ring)*Math.PI*2-Math.PI/2;
   const wave=a=>R+A*Math.cos(S.N*(a+Math.PI/2));      // bulges outward at every start
   const rf=Math.min(14.5,(2*Math.PI*R/ring)*0.46);
   const xy=(r,a)=>[C+r*Math.cos(a),C+r*Math.sin(a)];
   const fieldXY=pos=>xy(wave(ang(pos)),ang(pos));
-  const homeXY=(s,i)=>xy(wave(ang(start(s)))-34-30*i,ang(start(s))-Math.PI/ring);
-  const nestXY=(s,i)=>{const r=wave(ang(start(s)))+44+30*(i>>1);return xy(r,ang(start(s))+((i%2)?1:-1)*17/r);};
+  const homeAng=s=>ang(start(s))-Math.PI/ring;                 // spoke between entry and start
+  const homeXY=(s,i)=>xy(wave(ang(start(s)))-34-30*i,homeAng(s));
+  const nestXY=(s,i)=>{const r=wave(ang(start(s)))+46+30*(i>>1);return xy(r,ang(start(s))+((i%2)?1:-1)*17/r);};
   const sel=new Set(selectablePawns());
   const opts=currentOptions();
   const optMap=new Map(opts.map(o=>[o.to.zone+':'+o.to.pos,o]));
@@ -528,7 +529,7 @@ function boardSVG(){
   }
   // home + nest dots
   for(let s=0;s<S.N;s++){
-    const [ex,ey]=fieldXY(entry(S,s)), [h3x,h3y]=homeXY(s,3);
+    const [ex,ey]=xy(wave(ang(start(s))),homeAng(s)), [h3x,h3y]=homeXY(s,3);
     out+=`<line x1="${f(ex)}" y1="${f(ey)}" x2="${f(h3x)}" y2="${f(h3y)}" stroke="rgba(255,255,255,.7)" stroke-width="${rf*1.3}" stroke-linecap="round"/>`;
     for(let i=0;i<4;i++){
       const [x,y]=homeXY(s,i); const o=optMap.get('home:'+i);
@@ -538,7 +539,7 @@ function boardSVG(){
       const [nx,ny]=nestXY(s,i);
       out+=dot(nx,ny,rf*0.8,SEATS[s].c,'filter="url(#soft)"');
     }
-    const [lx,ly]=xy(wave(ang(start(s)))+82,ang(start(s))-Math.PI/ring*2.6);
+    const [lx,ly]=xy(wave(ang(start(s)))+106,ang(start(s)));
     out+=`<text x="${f(lx)}" y="${f(ly)}" text-anchor="middle" dominant-baseline="middle" font-family="var(--display)" font-weight="700" font-size="14" fill="#0b3560" stroke="#fff" stroke-width="3" paint-order="stroke">${SEATS[s].n}</text>`;
   }
   // pawns (3D discs)
