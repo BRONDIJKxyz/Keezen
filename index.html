@@ -53,7 +53,7 @@ svg.board{width:100%;height:auto;aspect-ratio:1;display:block;overflow:visible}
 .dest{cursor:pointer}
 .hl{fill:none;stroke:#ff8a00;stroke-width:4;pointer-events:none}
 .hl.cap{stroke:#e0202a}
-.pawn .rim{stroke:rgba(0,0,0,.35);stroke-width:1}
+.pawn .rim{stroke:rgba(0,0,0,.45);stroke-width:1.2}
 .pawn.can{cursor:pointer}
 .pawn.can .rim{stroke:#fff;stroke-width:3}
 .pawn.sel .rim{stroke:#ff8a00;stroke-width:4}
@@ -123,7 +123,7 @@ details ul{padding-left:18px;margin:8px 0 4px;font-size:13px;display:grid;gap:4p
 <script>
 'use strict';
 const PER=16;
-const SEATS=[{n:'Red',c:'#d7342f'},{n:'Blue',c:'#2b67c4'},{n:'Green',c:'#2f9e4f'},{n:'Yellow',c:'#e0b31d'},{n:'Purple',c:'#7b3fb3'},{n:'Orange',c:'#ef7d1a'}];
+const SEATS=[{n:'Red',c:'#d7342f',r:'#d7342f'},{n:'White',c:'#f6f4ee',r:'#9aa3ad'},{n:'Blue',c:'#2457b8',r:'#2457b8'},{n:'Orange',c:'#ef7d1a',r:'#ef7d1a'},{n:'Black',c:'#2a2a2e',r:'#2a2a2e'},{n:'Green',c:'#4caa2c',r:'#4caa2c'}];
 const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 const SUITS=['♠','♥','♦','♣'];
 const RANKNAME={A:'Ace',J:'Jack',Q:'Queen',K:'King'};
@@ -380,8 +380,8 @@ function clickDest(zone,pos){
 }
 
 /* ---------- persistence ---------- */
-function save(){ try{ localStorage.setItem('keezen-v8',JSON.stringify(S)); }catch(e){} }
-function loadSaved(){ try{ const s=localStorage.getItem('keezen-v8'); return s?JSON.parse(s):null; }catch(e){return null;} }
+function save(){ try{ localStorage.setItem('keezen-v9',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v9'); return s?JSON.parse(s):null; }catch(e){return null;} }
 
 /* ---------- rendering ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -491,7 +491,7 @@ function renderGame(){
   const nt=document.getElementById('nextturn'); if(nt)nt.onclick=nextTurn;
   const rm=document.getElementById('rematch'); if(rm)rm.onclick=rematch;
   const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
-  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v8');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v9');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
   const svg=app.querySelector('svg.board');
   svg.addEventListener('click',e=>{
     const pw=e.target.closest('[data-pid]'); if(pw){clickPawn(+pw.dataset.pid);return;}
@@ -548,7 +548,7 @@ function boardSVG(){
   for(let pos=0;pos<ring;pos++){
     const [x,y]=fieldXY(pos); const st=pos%PER===0?pos/PER:-1;
     const o=optMap.get('ring:'+pos);
-    out+=dot(x,y,rf,st>=0?SEATS[st].c:null,`filter="url(#soft)" ${o?`data-dz="ring" data-dp="${pos}" class="dest"`:''}`);
+    out+=dot(x,y,rf,st>=0?SEATS[st].r:null,`filter="url(#soft)" ${o?`data-dz="ring" data-dp="${pos}" class="dest"`:''}`);
     if(o)out+=`<circle class="hl ${o.cap!=null?'cap':''}" cx="${f(x)}" cy="${f(y)}" r="${f(rf+5)}"/>`;
   }
   // home + nest dots
@@ -558,10 +558,10 @@ function boardSVG(){
     for(let i=0;i<4;i++){
       const [x,y]=homeXY(s,i); const o=optMap.get('home:'+i);
       const mine=ui.pawn!=null&&byId(S,ui.pawn).seat===s&&o;
-      out+=dot(x,y,rf*0.9,SEATS[s].c,`filter="url(#soft)" ${mine?`data-dz="home" data-dp="${i}" class="dest"`:''}`);
+      out+=dot(x,y,rf*0.9,SEATS[s].r,`filter="url(#soft)" ${mine?`data-dz="home" data-dp="${i}" class="dest"`:''}`);
       if(mine)out+=`<circle class="hl" cx="${f(x)}" cy="${f(y)}" r="${f(rf*0.9+5)}"/>`;
       const [nx,ny]=nestXY(s,i);
-      out+=dot(nx,ny,rf*0.8,SEATS[s].c,'filter="url(#soft)"');
+      out+=dot(nx,ny,rf*0.8,SEATS[s].r,'filter="url(#soft)"');
     }
     const [lx,ly]=xy(wave(ang(start(s)))+106,ang(start(s)));
     out+=`<text x="${f(lx)}" y="${f(ly)}" text-anchor="middle" dominant-baseline="middle" font-family="var(--display)" font-weight="700" font-size="14" fill="#0b3560" stroke="#fff" stroke-width="3" paint-order="stroke">${SEATS[s].n}</text>`;
@@ -577,7 +577,7 @@ function boardSVG(){
       <circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="${SEATS[p.seat].c}"/>
       <circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="url(#shine)"/>
       <circle class="rim" cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="none"/>
-      ${isBlocker(p)?`<circle cx="${f(x)}" cy="${f(y)}" r="${f(r*0.3)}" fill="#fff" opacity=".9" pointer-events="none"/>`:''}</g>`;
+      ${isBlocker(p)?`<circle cx="${f(x)}" cy="${f(y)}" r="${f(r*0.3)}" fill="${p.seat===1?'#555':'#fff'}" opacity=".9" pointer-events="none"/>`:''}</g>`;
   }
   // step labels for the 7
   if(card&&card.r==='7'){
