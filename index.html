@@ -241,14 +241,16 @@ function personWon(st,seat){
 /* ---------- game flow ---------- */
 function buildDeck(N){
   const d=[]; let k=0;
-  while(d.length<13*N){ const s=SUITS[k%4]; RANKS.forEach(r=>d.push({r,s})); k++; }
+  while(d.length<13*Math.max(4,N)){ const s=SUITS[k%4]; RANKS.forEach(r=>d.push({r,s})); k++; }
   for(let i=d.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [d[i],d[j]]=[d[j],d[i]]; }
   return d;
 }
 function deal(){
   const size=[5,4,4][S.dealNo%3];
-  if(S.deck.length<size*S.N){ S.deck=buildDeck(S.N); S.discard=[]; }
-  S.hands=[]; for(let s=0;s<S.N;s++)S.hands.push(S.deck.splice(0,size));
+  const P=S.persons.length;
+  if(S.deck.length<size*P){ S.deck=buildDeck(P); S.discard=[]; }
+  S.hands=Array.from({length:S.N},()=>[]);
+  for(let q=0;q<P;q++){ const seat=seatsOf(q)[0]; if(seat!=null)S.hands[seat]=S.deck.splice(0,size); }
   S.dealNo++;
   if(S.dealNo%3===0)S.dealer=(S.dealer+1)%S.N;
 }
@@ -261,7 +263,7 @@ function newGame(cfg){
      startedAt:Date.now(),endedAt:null,roundStarter:cfg.starter||0,firstStarter:cfg.starter||0,hideCards:cfg.hideCards!==false};
   deal();
   S.turn=firstSeatWithCards(S.roundStarter);
-  log(-1,`New round: 5 cards per colour. ${S.persons[S.roundStarter]} starts.`);
+  log(-1,`New round: 5 cards each. ${S.persons[S.roundStarter]} starts.`);
   beginTurn(true);
 }
 function beginTurn(initial){
@@ -273,15 +275,12 @@ function beginTurn(initial){
   if(S.phase==='play')startPlay();
   save();render();
 }
-const firstSeatWithCards=person=>{const r=seatsOf(person).find(s=>S.hands[s].length);return r!=null?r:seatsOf(person)[0];};
+const firstSeatWithCards=person=>seatsOf(person)[0];
 const seatsOf=person=>Array.from({length:S.N},(_,s)=>s).filter(s=>S.seatPerson[s]===person);
 const seatPlayable=s=>S.hands[s].some(c=>cardPlayable(S,s,c));
 function startPlay(){
-  S.phase='play'; ui.turnStart=null;
-  if(!seatPlayable(S.turn)){
-    const alt=seatsOf(S.seatPerson[S.turn]).find(s=>s!==S.turn&&seatPlayable(s));
-    if(alt!=null)S.turn=alt; else S.phase='nocard';
-  }
+  S.phase='play';
+  if(!seatPlayable(S.turn))S.phase='nocard';
   ui.turnStart=clone(S);
 }
 function switchSeat(s){
@@ -297,7 +296,7 @@ function discardAll(){
 function finishMove(desc){
   const card=S.hands[S.turn].splice(ui.card,1)[0];
   S.discard.push(card);
-  log(S.turn,`${seatName(S.turn)} plays ${cardLabel(card)}: ${desc}`);
+  log(S.turn,`${personOf(S,S.turn)} plays ${cardLabel(card)}: ${desc}`);
   ui.card=null;ui.pawn=null;ui.used=0;ui.first=null;
   if(personWon(S,S.turn)){ S.phase='over'; S.winner=S.seatPerson[S.turn]; S.endedAt=Date.now(); const w=personOf(S,S.turn); scores[w]=(scores[w]||0)+1; gamesPlayed++; log(-1,`${w} wins after ${fmtDur(S.endedAt-S.startedAt)}!`); save();render();return; }
   S.phase='moved'; S.msg=`${cardLabel(card)}: ${desc}`; save(); render();
@@ -318,7 +317,7 @@ function nextTurn(){
     deal();
     S.roundStarter=(S.roundStarter+1)%P;          // the other player opens the next round
     n=firstSeatWithCards(S.roundStarter);
-    log(-1,`New round: ${S.hands[n].length} cards per colour. ${S.persons[S.roundStarter]} starts.`);
+    log(-1,`New round: ${S.hands[n].length} cards each. ${S.persons[S.roundStarter]} starts.`);
   }
   S.turn=n; beginTurn(false);
 }
@@ -386,8 +385,8 @@ function clickDest(zone,pos){
 }
 
 /* ---------- persistence ---------- */
-function save(){ try{ localStorage.setItem('keezen-v10',JSON.stringify(S)); }catch(e){} }
-function loadSaved(){ try{ const s=localStorage.getItem('keezen-v10'); return s?JSON.parse(s):null; }catch(e){return null;} }
+function save(){ try{ localStorage.setItem('keezen-v11',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v11'); return s?JSON.parse(s):null; }catch(e){return null;} }
 
 /* ---------- rendering ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -409,7 +408,7 @@ function renderSetup(){
     <fieldset><legend>Who plays which colour</legend>
       <div style="display:grid;gap:8px">${Array.from({length:setup.N},(_,s)=>`<div class="seatrow"><span class="chip"><span class="dot" style="background:${SEATS[s].c}"></span>${SEATS[s].n}</span>
         <select id="seat${s}" data-s="${s}">${persons.map((p,i)=>`<option value="${i}" ${setup.seatPerson[s]===i?'selected':''}>${esc(p)}</option>`).join('')}</select></div>`).join('')}</div>
-      <p class="hint">Colours owned by the same person form one team: each colour gets its own hand, but a card may move any pawn of that person. You win when all your colours are home.</p></fieldset>
+      <p class="hint">Each player gets one hand of cards and plays all of their colours with it. You win when all your colours are home.</p></fieldset>
     <fieldset><legend>Cards</legend><label class="row"><input type="checkbox" id="hideCards" ${setup.hideCards?'checked':''}> Hide cards between turns (pass-the-laptop screen)</label>
       <p class="hint">Turn this off if you sit side by side and don't mind seeing each other's cards: then there is no hand-off screen at all.</p></fieldset>
     <div class="row"><button class="primary" id="startBtn" style="font-size:17px">Start the game</button></div>
@@ -449,7 +448,7 @@ function renderGame(){
   if(S.phase==='play')ui.dealt=dealKey;
   let msg='',strong=false;
   if(S.phase==='over')msg=`${esc(S.persons[S.winner])} wins! Game time ${fmtDur(S.endedAt-S.startedAt)}.`,strong=true;
-  else if(S.phase==='nocard')msg='None of your colours has a playable card. By the rules you discard all your cards.',strong=true;
+  else if(S.phase==='nocard')msg='None of your cards can be played with any of your pawns. By the rules you discard your hand.',strong=true;
   else if(S.phase==='moved'){ const nx=nextPersonName(); msg=`Played ${esc(S.msg)}${nx?` <span class="next">→ ${esc(nx)} is next</span>`:''}`; strong=true; }
   else if(!card)msg='Pick a card you can play.';
   else if(card.r==='J'&&ui.pawn==null)msg='Jack: click the pawn of yours you want to swap.';
@@ -464,13 +463,12 @@ function renderGame(){
     <div class="rail">
       <div class="turnbox">
         <div class="eyebrow">Current turn</div>
-        <div class="who">${esc(person)} <span style="font-weight:500;color:var(--muted)">· playing <span class="dot" style="background:${SEATS[seat].c};vertical-align:middle"></span> ${SEATS[seat].n}</span></div>
+        <div class="who">${esc(person)} <span style="font-weight:500;color:var(--muted);font-size:15px">· ${seatsOf(S.seatPerson[seat]).map(s=>`<span class="dot" style="background:${SEATS[s].c};vertical-align:middle;width:12px;height:12px"></span>`).join(' ')}</span></div>
         <div class="msg ${strong?'strong':''}">${msg}</div>
         <div class="meta"><span>⏱ <span id="clock">${fmtDur((S.endedAt||Date.now())-S.startedAt)}</span></span>${S.persons.length>1?`<span class="score">${S.persons.map(n=>`${esc(n)} <b>${scores[n]||0}</b>`).join(' <span class="sep">–</span> ')}</span>`:''}</div>
       </div>
       <div>
-        ${seatsOf(S.seatPerson[seat]).length>1?`<div class="tabs">${seatsOf(S.seatPerson[seat]).map(s=>`<button class="tab ${s===seat?'on':''}" data-seat="${s}" ${(S.phase==='play'&&ui.card==null&&S.hands[s].length)||s===seat?'':'disabled'}><span class="dot" style="background:${SEATS[s].c}"></span>${SEATS[s].n} <span class="cnt">${S.hands[s].length}</span></button>`).join('')}</div>`:''}
-        <div class="eyebrow" style="margin-bottom:6px">${SEATS[seat].n}\u2019s cards${seatsOf(S.seatPerson[seat]).length>1?' <span style="font-weight:400;text-transform:none;letter-spacing:0">(switch colour above)</span>':''}</div>
+        <div class="eyebrow" style="margin-bottom:6px">${esc(person)}\u2019s cards</div>
         <div class="hand">${hand.map((c,i)=>{
           const ok=S.phase==='play'&&cardPlayable(S,seat,c);
           return `<button class="card ${c.s==='♥'||c.s==='♦'?'r':'b'} ${ok?'playable':''} ${ui.card===i?'sel':''} ${dealAnim?'deal':''}" style="${dealAnim?`animation-delay:${i*110}ms`:''}" data-card="${i}" ${ok?'':'disabled'} title="${esc(cardHelp(c.r))}"><span class="corner">${c.r}</span>${c.r}<span class="suit">${c.s}</span></button>`;}).join('')}</div>
@@ -497,16 +495,15 @@ function renderGame(){
         <li>Landing exactly on a pawn sends it back to the nest (your own pawns included).</li>
         <li>Passing your entry you choose: into home (exact count needed, no overtaking, no moving back) or another lap round the board.</li>
         <li>You must play if you can. If no card is playable, you discard your whole hand.</li>
-        <li>Round 1: 5 cards, then 4 and 4. All colours of one person play as one team: on your turn you pick which colour's hand to play from, and any card may move any of your pawns.</li>
+        <li>Round 1: 5 cards, then 4 and 4, one hand per player. Any card may move any pawn of your colours.</li>
       </ul></details>
     </div></div>`;
   app.querySelectorAll('[data-card]').forEach(b=>b.onclick=()=>selectCard(+b.dataset.card));
-  app.querySelectorAll('[data-seat]').forEach(b=>b.onclick=()=>switchSeat(+b.dataset.seat));
   const d=document.getElementById('discard'); if(d)d.onclick=discardAll;
   const nt=document.getElementById('nextturn'); if(nt)nt.onclick=nextTurn;
   const rm=document.getElementById('rematch'); if(rm)rm.onclick=rematch;
   const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
-  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v10');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v11');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
   const svg=app.querySelector('svg.board');
   runAnim(svg);
   svg.addEventListener('click',e=>{
