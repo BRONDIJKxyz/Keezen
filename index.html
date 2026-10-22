@@ -98,9 +98,13 @@ svg.board{width:100%;height:auto;aspect-ratio:1;display:block;overflow:visible}
 details{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface)}
 summary{cursor:pointer;font-weight:600;font-family:var(--display)}
 details ul{padding-left:18px;margin:8px 0 4px;font-size:13px;display:grid;gap:4px}
-table.homes{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
-table.homes td{padding:3px 4px;border-bottom:1px solid var(--line)}
-table.homes td:last-child{text-align:right}
+.standings{display:grid;gap:8px}
+.standing{border:1px solid var(--line);border-radius:10px;padding:8px 12px;display:grid;gap:4px;background:var(--surface)}
+.standing.on{border-color:var(--accent)}
+.stname{font-family:var(--display);font-size:16px;font-weight:700}
+.stname b{font-size:20px;margin-left:4px;font-variant-numeric:tabular-nums}
+.stseats{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px}
+.stseats .chip{font-weight:500}
 
 /* Hand-off overlay */
 .overlay{position:fixed;inset:0;background:var(--felt);color:#fff;display:grid;place-items:center;z-index:50;
@@ -324,8 +328,8 @@ function cancelChoice(){ if(ui.turnStart){ const ts=ui.turnStart; S=clone(ts); u
 /* ---------- interaction ---------- */
 function selectCard(i){
   if(S.phase!=='play')return;
+  if(ui.used>0)return; // mid-7: the card is committed; only "Undo choice" takes it back
   if(ui.card===i){cancelChoice();return;}
-  if(ui.used>0)return; // mid-7: don't switch
   const c=S.hands[S.turn][i]; if(!cardPlayable(S,S.turn,c))return;
   ui.card=i; ui.pawn=null; render();
 }
@@ -376,8 +380,8 @@ function clickDest(zone,pos){
 }
 
 /* ---------- persistence ---------- */
-function save(){ try{ localStorage.setItem('keezen-v7',JSON.stringify(S)); }catch(e){} }
-function loadSaved(){ try{ const s=localStorage.getItem('keezen-v7'); return s?JSON.parse(s):null; }catch(e){return null;} }
+function save(){ try{ localStorage.setItem('keezen-v8',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v8'); return s?JSON.parse(s):null; }catch(e){return null;} }
 
 /* ---------- rendering ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -408,7 +412,7 @@ function renderSetup(){
   const add=document.getElementById('addPerson'); if(add)add.onclick=()=>{setup.persons.push(`Player ${setup.persons.length+1}`);normalizeAssign();renderSetup();};
   app.querySelectorAll('select[data-s]').forEach(sel=>sel.onchange=()=>{setup.seatPerson[+sel.dataset.s]=+sel.value;});
   document.getElementById('startBtn').onclick=()=>{ app.querySelectorAll('#persons input').forEach(inp=>{setup.persons[+inp.dataset.i]=inp.value.trim()||`Player ${+inp.dataset.i+1}`;}); newGame(setup); };
-  const res=document.getElementById('resume'); if(res)res.onclick=()=>{S=saved; if(S.phase==='play'||S.phase==='nocard'){S.phase='play';startPlay();} render();};
+  const res=document.getElementById('resume'); if(res)res.onclick=()=>{S=saved; if(S.phase==='play'||S.phase==='nocard'){S.phase='play';startPlay();} else if(S.phase==='moved'){nextTurn();return;} render();};
 }
 function normalizeAssign(){ for(let s=0;s<6;s++){ if(setup.seatPerson[s]==null||setup.seatPerson[s]>=setup.persons.length)setup.seatPerson[s]=s%setup.persons.length; } }
 
@@ -435,8 +439,8 @@ function renderGame(){
   else if(!card)msg='Pick a card you can play.';
   else if(card.r==='J'&&ui.pawn==null)msg='Jack: click the pawn of yours you want to swap.';
   else if(card.r==='J')msg='Click the pawn to swap with.';
-  else if(card.r==='7'&&ui.pawn==null)msg=ui.used?`${7-ui.used} steps left: pick a different pawn.`:'Seven: pick a pawn. You may split the 7 over two pawns.';
-  else if(card.r==='7')msg='Click the space this pawn moves to (the number is the step count).';
+  else if(card.r==='7'&&ui.pawn==null)msg=ui.used?`Seven: ${ui.used} of 7 steps used. Pick a <b>different</b> pawn for the remaining ${7-ui.used}.`:'Seven: pick a pawn. You may use all 7 on one pawn or split them over two.';
+  else if(card.r==='7')msg=`Click the space this pawn moves to; the number is the step count${ui.used?` (${7-ui.used} left)`:''}.`;
   else if(ui.pawn==null)msg='Click the pawn you want to move.';
   else msg='Click the highlighted space to make the move.';
 
@@ -445,13 +449,13 @@ function renderGame(){
     <div class="rail">
       <div class="turnbox">
         <div class="eyebrow">Current turn</div>
-        <div class="who"><span class="dot" style="background:${SEATS[seat].c}"></span>${SEATS[seat].n} <span style="font-weight:500;color:var(--muted)">· ${esc(person)}</span></div>
+        <div class="who">${esc(person)} <span style="font-weight:500;color:var(--muted)">· playing <span class="dot" style="background:${SEATS[seat].c};vertical-align:middle"></span> ${SEATS[seat].n}</span></div>
         <div class="msg ${strong?'strong':''}">${msg}</div>
         <div class="meta"><span>⏱ <span id="clock">${fmtDur((S.endedAt||Date.now())-S.startedAt)}</span></span>${S.persons.length>1?`<span class="score">${S.persons.map(n=>`${esc(n)} <b>${scores[n]||0}</b>`).join(' <span class="sep">–</span> ')}</span>`:''}</div>
       </div>
       <div>
         ${seatsOf(S.seatPerson[seat]).length>1?`<div class="tabs">${seatsOf(S.seatPerson[seat]).map(s=>`<button class="tab ${s===seat?'on':''}" data-seat="${s}" ${(S.phase==='play'&&ui.card==null&&S.hands[s].length)||s===seat?'':'disabled'}><span class="dot" style="background:${SEATS[s].c}"></span>${SEATS[s].n} <span class="cnt">${S.hands[s].length}</span></button>`).join('')}</div>`:''}
-        <div class="eyebrow" style="margin-bottom:6px">${SEATS[seat].n}\u2019s cards</div>
+        <div class="eyebrow" style="margin-bottom:6px">${SEATS[seat].n}\u2019s cards${seatsOf(S.seatPerson[seat]).length>1?' <span style="font-weight:400;text-transform:none;letter-spacing:0">(switch colour above)</span>':''}</div>
         <div class="hand">${hand.map((c,i)=>{
           const ok=S.phase==='play'&&cardPlayable(S,seat,c);
           return `<button class="card ${c.s==='♥'||c.s==='♦'?'r':'b'} ${ok?'playable':''} ${ui.card===i?'sel':''} ${dealAnim?'deal':''}" style="${dealAnim?`animation-delay:${i*110}ms`:''}" data-card="${i}" ${ok?'':'disabled'} title="${esc(cardHelp(c.r))}"><span class="corner">${c.r}</span>${c.r}<span class="suit">${c.s}</span></button>`;}).join('')}</div>
@@ -463,7 +467,11 @@ function renderGame(){
         ${S.phase==='play'&&ui.card!=null?'<button id="cancel">Undo choice</button>':''}
         ${S.phase==='over'?'<button class="primary" id="rematch">Rematch (same players)</button><button id="newgame">New setup</button>':`<button class="ghost" id="newgame">${ui.confirmNew?'Sure? Click again':'New game'}</button>`}
       </div>
-      <table class="homes">${Array.from({length:S.N},(_,s)=>`<tr><td><span class="chip"><span class="dot" style="background:${SEATS[s].c}"></span>${SEATS[s].n}</span></td><td>${esc(personOf(S,s))}</td><td>${pawnsOf(S,s).filter(p=>p.zone==='home').length}/4 home</td></tr>`).join('')}</table>
+      <div class="standings">${S.persons.map((name,pi)=>{
+        const seats=seatsOf(pi); if(!seats.length)return '';
+        const togo=seats.reduce((n,s)=>n+pawnsOf(S,s).filter(p=>p.zone!=='home').length,0);
+        return `<div class="standing ${pi===S.seatPerson[seat]?'on':''}"><div class="stname">${esc(name)} <b>${togo}</b> <span class="hint">to go</span></div>
+          <div class="stseats">${seats.map(s=>{const h=pawnsOf(S,s).filter(p=>p.zone==='home').length;return `<span class="chip"><span class="dot" style="background:${SEATS[s].c}"></span>${SEATS[s].n} <span class="hint">${4-h} left</span></span>`;}).join('')}</div></div>`;}).join('')}</div>
       <div class="log">${S.log.slice(0,10).map(l=>`<div>${l.seat>=0?`<span class="dot" style="background:${SEATS[l.seat].c}"></span>`:''}<span>${esc(l.text)}</span></div>`).join('')||'<span class="hint">No moves yet.</span>'}</div>
       <details><summary>Rules in short</summary><ul>
         <li>Ace: pawn onto start or 1 forward. King: pawn onto start. Queen: 12 forward.</li>
@@ -483,7 +491,7 @@ function renderGame(){
   const nt=document.getElementById('nextturn'); if(nt)nt.onclick=nextTurn;
   const rm=document.getElementById('rematch'); if(rm)rm.onclick=rematch;
   const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
-  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v7');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v8');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
   const svg=app.querySelector('svg.board');
   svg.addEventListener('click',e=>{
     const pw=e.target.closest('[data-pid]'); if(pw){clickPawn(+pw.dataset.pid);return;}
