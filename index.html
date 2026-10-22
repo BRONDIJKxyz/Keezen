@@ -60,6 +60,7 @@ svg.board{width:100%;height:auto;aspect-ratio:1;display:block;overflow:visible}
 .hl{fill:none;stroke:#ff8a00;stroke-width:4;pointer-events:none}
 .hl.cap{stroke:#e0202a}
 .pawn .rim{stroke:rgba(0,0,0,.45);stroke-width:1.2}
+.pawn{will-change:transform}
 .pawn.can{cursor:pointer}
 .pawn.can .rim{stroke:#fff;stroke-width:3}
 .pawn.sel .rim{stroke:#ff8a00;stroke-width:4}
@@ -380,7 +381,7 @@ function clickDest(zone,pos){
   const capTxt=m.cap!=null?` and captures ${seatName(byId(S,m.cap).seat)}`:'';
   ui.anim=[{pid:p.id,from:{zone:p.zone,pos:p.pos,seat:p.seat},path:m.path}];
   if(p.zone!=='home'&&m.to.zone==='home')ui.fx={type:'home',seat:p.seat,pos:m.to.pos,pid:p.id,delay:m.path.length*55+120};
-  if(m.cap!=null){ ui.lastCap=true; const c=byId(S,m.cap); ui.anim.push({pid:c.id,from:{zone:c.zone,pos:c.pos,seat:c.seat},path:[{zone:'nest',pos:c.id%4}],delay:m.path.length*55,knock:true}); }
+  if(m.cap!=null){ ui.lastCap=true; const c=byId(S,m.cap); ui.anim.push({pid:c.id,from:{zone:c.zone,pos:c.pos,seat:c.seat},path:[{zone:'nest',pos:c.id%4}],delay:m.path.length*hopMs(m.path.length),knock:true}); }
   S=apply(S,m);
   if(r==='7'){
     ui.used+=m.steps;
@@ -397,8 +398,8 @@ function clickDest(zone,pos){
 }
 
 /* ---------- persistence ---------- */
-function save(){ try{ localStorage.setItem('keezen-v15',JSON.stringify(S)); }catch(e){} }
-function loadSaved(){ try{ const s=localStorage.getItem('keezen-v15'); return s?JSON.parse(s):null; }catch(e){return null;} }
+function save(){ try{ localStorage.setItem('keezen-v16',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v16'); return s?JSON.parse(s):null; }catch(e){return null;} }
 
 /* ---------- rendering ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -522,7 +523,7 @@ function renderGame(){
   const rm2=document.getElementById('rematch2'); if(rm2)rm2.onclick=rematch;
   const cw=document.getElementById('closewin'); if(cw)cw.onclick=()=>{ui.winShown=true;render();};
   const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
-  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v15');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v16');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
   const svg=app.querySelector('svg.board');
   runAnim(svg);
   if(ui.fx&&ui.fx.type==='home'&&GEO){ const fx=ui.fx; ui.fx=null; const [px,py]=GEO.pt(fx.seat,'home',fx.pos,fx.pid);
@@ -646,6 +647,7 @@ function boardSVG(){
 /* pawn animation: the pawn is drawn at its destination; we slide it in from where it was, hop by hop.
    A captured pawn gets the full treatment: squash on impact, shockwave, board shake, a high spinning
    arc back to its nest with a dust trail, a bounce on landing and a KICK! stamp. */
+const hopMs=n=>n>1?Math.max(28,Math.min(70,700/n)):180;
 function runAnim(svg){
   const list=ui.anim; ui.anim=null; if(!list||!GEO)return;
   const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches; if(reduce)return;
@@ -659,7 +661,7 @@ function runAnim(svg){
     const at=(x,y,extra='')=>g.setAttribute('transform',`translate(${(x-end[0]).toFixed(1)} ${(y-end[1]).toFixed(1)}) ${extra}`);
     at(pts[0][0],pts[0][1]);
     if(a.knock){ g.parentNode.appendChild(g); knockAnim(svg,g,pts[0],end,t0,SEATS[pawn.seat].c); continue; }
-    const hop=a.path.length>1?Math.max(28,Math.min(70,700/a.path.length)):180;
+    const hop=hopMs(a.path.length);
     const frame=now=>{
       const t=Math.max(0,now-t0)/hop; const i=Math.min(pts.length-1,Math.floor(t)); const f=Math.min(1,t-i);
       if(i>=pts.length-1){ g.removeAttribute('transform'); return; }
@@ -674,7 +676,7 @@ function runAnim(svg){
 function knockAnim(svg,g,from,end,t0,color){
   const SVGNS='http://www.w3.org/2000/svg';
   const [fx,fy]=from, [ex,ey]=end;
-  const SQ=170, ARC=640, LAND=160;
+  const SQ=170, ARC=700, LAND=180;
   const center=(x,y)=>`translate(${(x-ex).toFixed(1)} ${(y-ey).toFixed(1)})`;
   const scaleAt=(sx,sy)=>`translate(${ex.toFixed(1)} ${ey.toFixed(1)}) scale(${sx.toFixed(3)} ${sy.toFixed(3)}) translate(${(-ex).toFixed(1)} ${(-ey).toFixed(1)})`;
   let started=false, wave=null, stamp=null, lastTrail=0;
@@ -695,12 +697,12 @@ function knockAnim(svg,g,from,end,t0,color){
       const k=t/SQ, s=Math.sin(k*Math.PI);
       g.setAttribute('transform',`${center(fx,fy)} ${scaleAt(1+0.45*s,1-0.4*s)}`);
     } else if(t<SQ+ARC){ // high spinning arc back to the nest
-      const k=(t-SQ)/ARC, e=k; const x=fx+(ex-fx)*e, y=fy+(ey-fy)*e-Math.sin(k*Math.PI)*150;
-      g.setAttribute('transform',`${center(x,y)} rotate(${(k*900).toFixed(0)} ${ex.toFixed(1)} ${ey.toFixed(1)})`);
-      if(now-lastTrail>45){ lastTrail=now; try{ const [sx,sy]=svgToScreen(svg,x,y); burst(sx,sy,3,2,[color,'#dddddd']); }catch(e){} }
+      const k=(t-SQ)/ARC, e=k<0.5?2*k*k:1-Math.pow(-2*k+2,2)/2; const x=fx+(ex-fx)*e, y=fy+(ey-fy)*e-Math.sin(k*Math.PI)*150;
+      g.setAttribute('transform',`${center(x,y)} rotate(${(e*720).toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)})`);
+      if(now-lastTrail>70){ lastTrail=now; try{ const [sx,sy]=svgToScreen(svg,x,y); burst(sx,sy,2,1.5,[color,'#dddddd']); }catch(e){} }
     } else if(t<SQ+ARC+LAND){ // bounce on landing
       const k=(t-SQ-ARC)/LAND, s=Math.sin(k*Math.PI);
-      g.setAttribute('transform',scaleAt(1+0.3*s,1-0.3*s));
+      g.setAttribute('transform',scaleAt(1+0.25*s,1-0.25*s));
     } else { g.removeAttribute('transform'); if(wave)wave.remove(); if(stamp)stamp.remove(); return; }
     requestAnimationFrame(frame);
   };
@@ -715,7 +717,7 @@ function confettiCanvas(){
 }
 function burst(x,y,n,spread,colors){
   const cf=confettiCanvas(); const dpr=window.devicePixelRatio||1;
-  cf.c.width=innerWidth*dpr; cf.c.height=innerHeight*dpr; cf.ctx.setTransform(dpr,0,0,dpr,0,0);
+  if(cf.c.width!==Math.round(innerWidth*dpr)||cf.c.height!==Math.round(innerHeight*dpr)){ cf.c.width=Math.round(innerWidth*dpr); cf.c.height=Math.round(innerHeight*dpr); cf.ctx.setTransform(dpr,0,0,dpr,0,0); }
   for(let i=0;i<n;i++){
     const a=Math.random()*Math.PI*2, v=spread*(0.4+Math.random());
     cf.parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-spread*0.6,w:4+Math.random()*6,h:3+Math.random()*5,rot:Math.random()*6.3,vr:(Math.random()-.5)*.4,
