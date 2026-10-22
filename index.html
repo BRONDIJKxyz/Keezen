@@ -60,7 +60,10 @@ svg.board{width:100%;height:auto;aspect-ratio:1;display:block;overflow:visible}
 .hl{fill:none;stroke:#ff8a00;stroke-width:4;pointer-events:none}
 .hl.cap{stroke:#e0202a}
 .pawn .rim{stroke:rgba(0,0,0,.45);stroke-width:1.2}
-.pawn{will-change:transform}
+.pawn{will-change:transform;transition:opacity .2s}
+.pawn.dim{opacity:.45}
+.pickring{fill:none;stroke:#ff8a00;stroke-width:4;pointer-events:none}
+@media (prefers-reduced-motion:no-preference){.pickring{animation:pulse 1s ease-in-out infinite}}
 .pawn.can{cursor:pointer}
 .pawn.can .rim{stroke:#fff;stroke-width:3}
 .pawn.sel .rim{stroke:#ff8a00;stroke-width:4}
@@ -398,8 +401,8 @@ function clickDest(zone,pos){
 }
 
 /* ---------- persistence ---------- */
-function save(){ try{ localStorage.setItem('keezen-v16',JSON.stringify(S)); }catch(e){} }
-function loadSaved(){ try{ const s=localStorage.getItem('keezen-v16'); return s?JSON.parse(s):null; }catch(e){return null;} }
+function save(){ try{ localStorage.setItem('keezen-v17',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v17'); return s?JSON.parse(s):null; }catch(e){return null;} }
 
 /* ---------- rendering ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -466,9 +469,9 @@ function renderGame(){
   else if(!card)msg='Pick a card you can play.';
   else if(card.r==='J'&&ui.pawn==null)msg='Jack: click the pawn of yours you want to swap.';
   else if(card.r==='J')msg='Click the pawn to swap with.';
-  else if(card.r==='7'&&ui.pawn==null)msg=ui.used?`Seven: ${ui.used} of 7 steps used. Pick a <b>different</b> pawn for the remaining ${7-ui.used}.`:'Seven: pick a pawn. You may use all 7 on one pawn or split them over two.';
+  else if(card.r==='7'&&ui.pawn==null)msg=ui.used?`Seven: ${ui.used} of 7 steps used. Click one of the pawns with an orange ring for the remaining ${7-ui.used}.`:'Seven: click a pawn with an orange ring. You may use all 7 on one pawn or split them over two.';
   else if(card.r==='7')msg=`Click the space this pawn moves to; the number is the step count${ui.used?` (${7-ui.used} left)`:''}. Red ring = capture.`;
-  else if(ui.pawn==null)msg='Click the pawn you want to move.';
+  else if(ui.pawn==null)msg='Click one of the pawns with an orange ring.';
   else msg='Click the highlighted space to make the move (red ring = capture that pawn).';
 
   app.innerHTML=`<div class="game">
@@ -523,7 +526,7 @@ function renderGame(){
   const rm2=document.getElementById('rematch2'); if(rm2)rm2.onclick=rematch;
   const cw=document.getElementById('closewin'); if(cw)cw.onclick=()=>{ui.winShown=true;render();};
   const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
-  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v16');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v17');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
   const svg=app.querySelector('svg.board');
   runAnim(svg);
   if(ui.fx&&ui.fx.type==='home'&&GEO){ const fx=ui.fx; ui.fx=null; const [px,py]=GEO.pt(fx.seat,'home',fx.pos,fx.pid);
@@ -620,7 +623,9 @@ function boardSVG(){
     let x,y;
     if(p.zone==='ring')[x,y]=fieldXY(p.pos); else if(p.zone==='home')[x,y]=homeXY(p.seat,p.pos); else [x,y]=nestXY(p.seat,p.id%4);
     const cls=['pawn']; if(sel.has(p.id))cls.push(isJackTarget?'target':'can'); if(ui.pawn===p.id)cls.push('sel');
+    if(card&&!sel.has(p.id)&&ui.pawn!==p.id&&!(isJackTarget)&&!optMap.has((p.zone)+':'+p.pos))cls.push('dim');
     const r=rf*0.85;
+    if(sel.has(p.id))out+=`<circle class="pickring" cx="${f(x)}" cy="${f(y)}" r="${f(r+7)}"/>`;
     out+=`<g data-pid="${p.id}" class="${cls.join(' ')}" filter="url(#shadow)">
       <circle cx="${f(x)}" cy="${f(y+r*0.35)}" r="${f(r)}" fill="${SEATS[p.seat].c}" style="filter:brightness(.55)"/>
       <circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="${SEATS[p.seat].c}"/>
