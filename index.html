@@ -116,6 +116,8 @@ details ul{padding-left:18px;margin:8px 0 4px;font-size:13px;display:grid;gap:4p
 .overlay .seat .dot{width:22px;height:22px}
 .overlay button{font-size:18px;padding:14px 22px;background:#fff;color:#1b221c;border-color:#fff;border-radius:12px;font-weight:700}
 .overlay p{color:rgba(255,255,255,.75);margin:0;max-width:42ch}
+.overlay .prev{color:#fff;font-size:17px;background:rgba(255,255,255,.12);padding:8px 14px;border-radius:8px}
+.overlay{cursor:pointer;outline:none}
 </style>
 
 <div id="app"></div>
@@ -131,7 +133,7 @@ let S=null;                       // game state (plain JSON)
 let ui={card:null,pawn:null,used:0,first:null,turnStart:null,confirmNew:false,moveToken:0,dealt:null};
 let scores={};                    // wins per player name, kept until the page is refreshed
 let gamesPlayed=0;
-let setup={N:6,persons:['Player 1','Player 2'],seatPerson:[0,0,1,1,1,0]};   // player 1 = top half (Green, Red, White), player 2 = bottom half
+let setup={N:6,persons:['Player 1','Player 2'],seatPerson:[0,0,1,1,1,0],hideCards:true};   // player 1 = top half (Green, Red, White), player 2 = bottom half
 const app=document.getElementById('app');
 
 /* ---------- helpers ---------- */
@@ -153,14 +155,15 @@ function controlled(st,seat){
 }
 function fwd(st,p,n,enter=true){
   if(p.zone==='nest')return null;
-  let zone=p.zone,cur=p.pos,cap=null;
+  let zone=p.zone,cur=p.pos,cap=null; const path=[];
   for(let k=1;k<=n;k++){
     if(zone==='ring'){ if(enter&&cur===entry(st,p.seat)){zone='home';cur=0;} else cur=(cur+1)%st.ring; }
     else { cur++; if(cur>3)return null; }
+    path.push({zone,pos:cur});
     const occ= zone==='ring'?ringAt(st,cur):homeAt(st,p.seat,cur);
     if(occ){ if(zone==='home')return null; if(isBlocker(occ))return null; if(k===n)cap=occ; }
   }
-  return {kind:'move',pid:p.id,to:{zone,pos:cur},cap:cap?cap.id:null,steps:n};
+  return {kind:'move',pid:p.id,to:{zone,pos:cur},cap:cap?cap.id:null,steps:n,path};
 }
 /* both readings of a forward move: into home, or past the entry for another lap (player's choice) */
 function fwdBoth(st,p,n){
@@ -171,19 +174,19 @@ function fwdBoth(st,p,n){
 }
 function back4(st,p){
   if(p.zone!=='ring')return null;
-  let cur=p.pos,cap=null;
+  let cur=p.pos,cap=null; const path=[];
   for(let k=1;k<=4;k++){
-    cur=(cur-1+st.ring)%st.ring;
+    cur=(cur-1+st.ring)%st.ring; path.push({zone:'ring',pos:cur});
     const occ=ringAt(st,cur);
     if(occ){ if(isBlocker(occ))return null; if(k===4)cap=occ; }
   }
-  return {kind:'move',pid:p.id,to:{zone:'ring',pos:cur},cap:cap?cap.id:null,steps:-4};
+  return {kind:'move',pid:p.id,to:{zone:'ring',pos:cur},cap:cap?cap.id:null,steps:-4,path};
 }
 function startMove(st,p){
   if(p.zone!=='nest')return null;
   const dest=start(p.seat), occ=ringAt(st,dest);
   if(occ&&occ.seat===p.seat)return null;
-  return {kind:'move',pid:p.id,to:{zone:'ring',pos:dest},cap:occ?occ.id:null,steps:0};
+  return {kind:'move',pid:p.id,to:{zone:'ring',pos:dest},cap:occ?occ.id:null,steps:0,path:[{zone:'ring',pos:dest}]};
 }
 function apply(st,m){
   const n=clone(st);
@@ -255,7 +258,7 @@ function newGame(cfg){
   for(let s=0;s<N;s++)for(let i=0;i<4;i++)pawns.push({id:s*4+i,seat:s,zone:'nest',pos:i});
   S={N,ring:PER*N,persons:cfg.persons.slice(),seatPerson:cfg.seatPerson.slice(0,N),pawns,hands:[],deck:[],discard:[],
      dealer:N-1,dealNo:0,turn:0,phase:'play',log:[],winner:null,lastPerson:null,msg:'',
-     startedAt:Date.now(),endedAt:null,roundStarter:cfg.starter||0,firstStarter:cfg.starter||0};
+     startedAt:Date.now(),endedAt:null,roundStarter:cfg.starter||0,firstStarter:cfg.starter||0,hideCards:cfg.hideCards!==false};
   deal();
   S.turn=firstSeatWithCards(S.roundStarter);
   log(-1,`New round: 5 cards per colour. ${S.persons[S.roundStarter]} starts.`);
@@ -264,7 +267,7 @@ function newGame(cfg){
 function beginTurn(initial){
   ui.card=null;ui.pawn=null;ui.used=0;ui.first=null;ui.turnStart=null;
   const person=S.seatPerson[S.turn];
-  const distinct=new Set(S.seatPerson).size>1;
+  const distinct=new Set(S.seatPerson).size>1&&S.hideCards!==false;
   if(distinct&&(initial||S.lastPerson!==person))S.phase='handoff'; else S.phase='play';
   S.lastPerson=person;
   if(S.phase==='play')startPlay();
@@ -320,7 +323,7 @@ function nextTurn(){
   S.turn=n; beginTurn(false);
 }
 function fmtDur(ms){const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor(t%3600/60),sec=t%60;return (h?h+':':'')+String(m).padStart(h?2:1,'0')+':'+String(sec).padStart(2,'0');}
-function rematch(){ const cfg={N:S.N,persons:S.persons,seatPerson:S.seatPerson,starter:(S.firstStarter+1)%S.persons.length}; newGame(cfg); }
+function rematch(){ const cfg={N:S.N,persons:S.persons,seatPerson:S.seatPerson,starter:(S.firstStarter+1)%S.persons.length,hideCards:S.hideCards}; newGame(cfg); }
 setInterval(()=>{const el=document.getElementById('clock'); if(el&&S&&!S.endedAt)el.textContent=fmtDur(Date.now()-S.startedAt);},1000);
 function cardLabel(c){ return (RANKNAME[c.r]||c.r)+c.s; }
 function cancelChoice(){ if(ui.turnStart){ const ts=ui.turnStart; S=clone(ts); ui.turnStart=ts; } ui.card=null;ui.pawn=null;ui.used=0;ui.first=null; render(); }
@@ -353,6 +356,7 @@ function clickPawn(id){
   const sel=selectablePawns();
   if(r==='J'&&ui.pawn!=null&&sel.includes(id)){
     const a=byId(S,ui.pawn), b=byId(S,id);
+    ui.anim=[{pid:a.id,from:{zone:a.zone,pos:a.pos,seat:a.seat},path:[{zone:b.zone,pos:b.pos}]},{pid:b.id,from:{zone:b.zone,pos:b.pos,seat:b.seat},path:[{zone:a.zone,pos:a.pos}]}];
     S=apply(S,{kind:'swap',a:a.id,b:b.id});
     finishMove(`swaps ${seatName(a.seat)} with ${seatName(b.seat)}.`); return;
   }
@@ -364,6 +368,8 @@ function clickDest(zone,pos){
   const m=opts.find(o=>o.to.zone===zone&&o.to.pos===pos); if(!m)return;
   const p=byId(S,ui.pawn), r=S.hands[S.turn][ui.card].r;
   const capTxt=m.cap!=null?` and captures ${seatName(byId(S,m.cap).seat)}`:'';
+  ui.anim=[{pid:p.id,from:{zone:p.zone,pos:p.pos,seat:p.seat},path:m.path}];
+  if(m.cap!=null){ const c=byId(S,m.cap); ui.anim.push({pid:c.id,from:{zone:c.zone,pos:c.pos,seat:c.seat},path:[{zone:'nest',pos:c.id%4}],delay:m.path.length*55,fade:true}); }
   S=apply(S,m);
   if(r==='7'){
     ui.used+=m.steps;
@@ -380,8 +386,8 @@ function clickDest(zone,pos){
 }
 
 /* ---------- persistence ---------- */
-function save(){ try{ localStorage.setItem('keezen-v9',JSON.stringify(S)); }catch(e){} }
-function loadSaved(){ try{ const s=localStorage.getItem('keezen-v9'); return s?JSON.parse(s):null; }catch(e){return null;} }
+function save(){ try{ localStorage.setItem('keezen-v10',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v10'); return s?JSON.parse(s):null; }catch(e){return null;} }
 
 /* ---------- rendering ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -404,6 +410,8 @@ function renderSetup(){
       <div style="display:grid;gap:8px">${Array.from({length:setup.N},(_,s)=>`<div class="seatrow"><span class="chip"><span class="dot" style="background:${SEATS[s].c}"></span>${SEATS[s].n}</span>
         <select id="seat${s}" data-s="${s}">${persons.map((p,i)=>`<option value="${i}" ${setup.seatPerson[s]===i?'selected':''}>${esc(p)}</option>`).join('')}</select></div>`).join('')}</div>
       <p class="hint">Colours owned by the same person form one team: each colour gets its own hand, but a card may move any pawn of that person. You win when all your colours are home.</p></fieldset>
+    <fieldset><legend>Cards</legend><label class="row"><input type="checkbox" id="hideCards" ${setup.hideCards?'checked':''}> Hide cards between turns (pass-the-laptop screen)</label>
+      <p class="hint">Turn this off if you sit side by side and don't mind seeing each other's cards: then there is no hand-off screen at all.</p></fieldset>
     <div class="row"><button class="primary" id="startBtn" style="font-size:17px">Start the game</button></div>
   </div>`;
   app.querySelectorAll('input[name=N]').forEach(r=>r.onchange=()=>{setup.N=+r.value;normalizeAssign();renderSetup();});
@@ -411,6 +419,7 @@ function renderSetup(){
   app.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{setup.persons.splice(+b.dataset.del,1);normalizeAssign();renderSetup();});
   const add=document.getElementById('addPerson'); if(add)add.onclick=()=>{setup.persons.push(`Player ${setup.persons.length+1}`);normalizeAssign();renderSetup();};
   app.querySelectorAll('select[data-s]').forEach(sel=>sel.onchange=()=>{setup.seatPerson[+sel.dataset.s]=+sel.value;});
+  document.getElementById('hideCards').onchange=e=>{setup.hideCards=e.target.checked;};
   document.getElementById('startBtn').onclick=()=>{ app.querySelectorAll('#persons input').forEach(inp=>{setup.persons[+inp.dataset.i]=inp.value.trim()||`Player ${+inp.dataset.i+1}`;}); newGame(setup); };
   const res=document.getElementById('resume'); if(res)res.onclick=()=>{S=saved; if(S.phase==='play'||S.phase==='nocard'){S.phase='play';startPlay();} else if(S.phase==='moved'){nextTurn();return;} render();};
 }
@@ -419,12 +428,18 @@ function normalizeAssign(){ const top=[0,0,1,1,1,0]; for(let s=0;s<6;s++){ if(se
 function renderGame(){
   const seat=S.turn, person=personOf(S,seat);
   if(S.phase==='handoff'){
-    app.innerHTML=`<div class="overlay"><div class="inner">
+    const prev=S.log[0]&&!S.log[0].text.startsWith('New round')?S.log[0].text:'';
+    const round=S.log.find(l=>l.text.startsWith('New round'));
+    app.innerHTML=`<div class="overlay" id="handoff" tabindex="0"><div class="inner">
       <div class="eyebrow">Pass the laptop to</div><h2>${esc(person)}</h2>
-      <div class="seat"><span class="dot" style="background:${SEATS[seat].c}"></span>${SEATS[seat].n} is up</div>
-      <button id="reveal">I am ${esc(person)}, show my cards</button>
-      <p>The previous player looks away. The cards only appear after this button.</p></div></div>`;
-    document.getElementById('reveal').onclick=()=>{startPlay();save();render();};
+      ${prev?`<p class="prev">${esc(prev)}</p>`:''}
+      ${S.log[0]&&S.log[0].text.startsWith('New round')?`<p class="prev">${esc(S.log[0].text)}</p>`:''}
+      <button id="reveal">Show ${esc(person)}'s cards</button>
+      <p>Tap anywhere or press any key once ${esc(person)} has the laptop.</p></div></div>`;
+    const go=()=>{startPlay();save();render();};
+    document.getElementById('handoff').onclick=go;
+    document.getElementById('handoff').onkeydown=e=>{e.preventDefault();go();};
+    document.getElementById('handoff').focus();
     return;
   }
   const hand=S.hands[seat]||[];
@@ -491,8 +506,9 @@ function renderGame(){
   const nt=document.getElementById('nextturn'); if(nt)nt.onclick=nextTurn;
   const rm=document.getElementById('rematch'); if(rm)rm.onclick=rematch;
   const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
-  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v9');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v10');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
   const svg=app.querySelector('svg.board');
+  runAnim(svg);
   svg.addEventListener('click',e=>{
     const pw=e.target.closest('[data-pid]'); if(pw){clickPawn(+pw.dataset.pid);return;}
     const f=e.target.closest('[data-dz]'); if(f){clickDest(f.dataset.dz,+f.dataset.dp);}
@@ -505,6 +521,7 @@ function cardHelp(r){
 }
 
 /* geometry: Dutch tea-towel board, white dots on blue check, Delft-blue centre */
+let GEO=null;
 function boardSVG(){
   const VB=1000,C=500,R=352,A=20, ring=S.ring;
   const rfScale=1.12;
@@ -516,6 +533,7 @@ function boardSVG(){
   const homeAng=s=>ang(start(s))-Math.PI/ring;                 // spoke between entry and start
   const homeXY=(s,i)=>xy(wave(ang(start(s)))-34-30*i,homeAng(s));
   const nestXY=(s,i)=>{const r=wave(ang(start(s)))+46+30*(i>>1);return xy(r,ang(start(s))+((i%2)?1:-1)*17/r);};
+  GEO={pt:(seat,zone,pos,pid)=>zone==='ring'?fieldXY(pos):zone==='home'?homeXY(seat,pos):nestXY(seat,pid%4)};
   const sel=new Set(selectablePawns());
   const opts=currentOptions();
   const optMap=new Map(opts.map(o=>[o.to.zone+':'+o.to.pos,o]));
@@ -592,6 +610,31 @@ function boardSVG(){
   return out;
 }
 
+/* pawn animation: the pawn is drawn at its destination; we slide it in from where it was, hop by hop */
+function runAnim(svg){
+  const list=ui.anim; ui.anim=null; if(!list||!GEO)return;
+  const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches; if(reduce)return;
+  for(const a of list){
+    const g=svg.querySelector(`g[data-pid="${a.pid}"]`); if(!g)continue;
+    const pawn=byId(S,a.pid);
+    const end=GEO.pt(pawn.seat,pawn.zone,pawn.pos,pawn.id);
+    const pts=[GEO.pt(a.from.seat,a.from.zone,a.from.pos,a.pid),...a.path.map(w=>GEO.pt(pawn.seat,w.zone,w.pos,a.pid))];
+    const hop=a.path.length>1?Math.max(28,Math.min(70,700/a.path.length)):180;
+    const t0=performance.now()+(a.delay||0);
+    g.setAttribute('transform',`translate(${(pts[0][0]-end[0]).toFixed(1)} ${(pts[0][1]-end[1]).toFixed(1)})`);
+    const frame=now=>{
+      if(ui.anim!==null&&false)return;
+      const t=Math.max(0,now-t0)/hop; const i=Math.min(pts.length-1,Math.floor(t)); const f=Math.min(1,t-i);
+      if(i>=pts.length-1){ g.removeAttribute('transform'); g.style.opacity=''; return; }
+      const x=pts[i][0]+(pts[i+1][0]-pts[i][0])*f, y=pts[i][1]+(pts[i+1][1]-pts[i][1])*f;
+      const lift=Math.sin(f*Math.PI)*(a.path.length>1?4:10);
+      g.setAttribute('transform',`translate(${(x-end[0]).toFixed(1)} ${(y-end[1]-lift).toFixed(1)})`);
+      if(a.fade)g.style.opacity=String(0.35+0.65*f);
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+}
 /* boot */
 function boot(data){
   if(data&&data.S){S=data.S;ui=Object.assign(ui,data.ui||{});}
