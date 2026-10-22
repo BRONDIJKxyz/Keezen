@@ -1,0 +1,568 @@
+<title>Keezen</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: square board on the left, control rail on the right; stacks to one column on phones. */
+:root{
+  --bg:#e9ece0; --surface:#f8f8f1; --fg:#1b221c; --muted:#5e6a5f; --line:#c9d0c0;
+  --accent:#b9431f; --accent-ink:#fff;
+  --felt:#2d6a4d; --felt-line:#245a41; --field:#fff9e8; --field-line:#8e9a8a;
+  --card:#ffffff; --card-line:#b9c0b2; --red:#c0282b; --black:#1d2126;
+  --ok:#2f8f5b; --warn:#b98a1a;
+  --display:"Bricolage Grotesque","Trebuchet MS",system-ui,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121814; --surface:#1b231d; --fg:#edf0e6; --muted:#98a496; --line:#303c34;
+  --accent:#ea7a52; --accent-ink:#141814; --felt:#1f4b37; --felt-line:#183d2c;
+  --field:#f2ecd9; --field-line:#6a7466; --card:#f4f1e7; --card-line:#5a665c; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#121814; --surface:#1b231d; --fg:#edf0e6; --muted:#98a496; --line:#303c34;
+  --accent:#ea7a52; --accent-ink:#141814; --felt:#1f4b37; --felt-line:#183d2c;
+  --field:#f2ecd9; --field-line:#6a7466; --card:#f4f1e7; --card-line:#5a665c; color-scheme:dark }
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45;
+  padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:8px 14px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button.ghost{background:transparent}
+button:disabled{opacity:.45;cursor:not-allowed}
+input,select{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* Setup */
+.setup{max-width:640px;margin:0 auto;display:grid;gap:22px}
+.setup h1{font-size:40px;font-weight:800;line-height:1}
+.setup p{max-width:62ch;color:var(--muted);margin:0}
+fieldset{border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:10px;min-width:0}
+legend{font-family:var(--display);font-weight:700;padding:0 6px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.seatrow{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:8px;font-weight:600}
+.dot{width:14px;height:14px;border-radius:50%;display:inline-block;border:2px solid rgba(255,255,255,.7);box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+
+/* Game */
+.game{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+@media (max-width:860px){.game{grid-template-columns:1fr}}
+.boardwrap{width:min(100%,calc(100vh - 60px));max-width:100%;margin:0 auto}
+.wm{text-align:center;font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:8px;opacity:.7}
+svg.board{width:100%;height:auto;aspect-ratio:1;display:block;overflow:visible}
+.dest{cursor:pointer}
+.hl{fill:none;stroke:#ff8a00;stroke-width:4;pointer-events:none}
+.hl.cap{stroke:#e0202a}
+.pawn .rim{stroke:rgba(0,0,0,.35);stroke-width:1}
+.pawn.can{cursor:pointer}
+.pawn.can .rim{stroke:#fff;stroke-width:3}
+.pawn.sel .rim{stroke:#ff8a00;stroke-width:4}
+.pawn.target{cursor:pointer}
+.pawn.target .rim{stroke:#ff8a00;stroke-width:3.5;stroke-dasharray:4 3}
+.steplbl{font:700 14px var(--display);fill:#fff;paint-order:stroke;stroke:#0b3560;stroke-width:3px;pointer-events:none}
+@media (prefers-reduced-motion:no-preference){ .hl{animation:pulse 1.1s ease-in-out infinite} .pawn{transition:transform .35s ease} }
+@keyframes pulse{50%{stroke-opacity:.35}}
+
+.rail{display:grid;gap:14px;min-width:0}
+.turnbox{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;gap:6px}
+.turnbox .who{font-family:var(--display);font-size:24px;font-weight:700;display:flex;align-items:center;gap:10px}
+.turnbox .who .dot{width:18px;height:18px}
+.msg{min-height:1.5em;color:var(--muted)}
+.msg.strong{color:var(--fg);font-weight:500}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.tab{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:13px}
+.tab.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);font-weight:600}
+.tab .cnt{color:var(--muted);font-variant-numeric:tabular-nums}
+.hand{display:flex;flex-wrap:wrap;gap:8px}
+.card{width:58px;height:82px;border-radius:7px;background:var(--card);border:1px solid var(--card-line);display:grid;place-items:center;position:relative;
+  font-family:var(--display);font-weight:800;font-size:22px;box-shadow:0 1px 2px rgba(0,0,0,.18);transition:transform .12s}
+.card .corner{position:absolute;top:4px;left:6px;font-size:12px;line-height:1}
+.card .suit{font-size:26px;line-height:1}
+.card.r{color:var(--red)} .card.b{color:var(--black)}
+.card.playable:hover{transform:translateY(-4px)}
+.card.sel{outline:3px solid var(--accent);outline-offset:1px;transform:translateY(-6px)}
+.card:disabled{opacity:.35}
+.hint{font-size:13px;color:var(--muted)}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.log{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);display:grid;gap:4px;font-size:13px;max-height:220px;overflow:auto}
+.log div{display:flex;gap:8px;align-items:baseline}
+.log .dot{width:10px;height:10px;flex:none}
+details{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface)}
+summary{cursor:pointer;font-weight:600;font-family:var(--display)}
+details ul{padding-left:18px;margin:8px 0 4px;font-size:13px;display:grid;gap:4px}
+table.homes{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+table.homes td{padding:3px 4px;border-bottom:1px solid var(--line)}
+table.homes td:last-child{text-align:right}
+
+/* Hand-off overlay */
+.overlay{position:fixed;inset:0;background:var(--felt);color:#fff;display:grid;place-items:center;z-index:50;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:env(safe-area-inset-top,0px) env(safe-area-inset-bottom,0px)}
+.overlay .inner{text-align:center;display:grid;gap:18px;max-width:520px;justify-items:center}
+.overlay .eyebrow{color:rgba(255,255,255,.7)}
+.overlay h2{font-size:clamp(34px,7vw,64px);font-weight:800;line-height:1}
+.overlay .seat{display:inline-flex;gap:10px;align-items:center;font-size:20px;font-weight:600}
+.overlay .seat .dot{width:22px;height:22px}
+.overlay button{font-size:18px;padding:14px 22px;background:#fff;color:#1b221c;border-color:#fff;border-radius:12px;font-weight:700}
+.overlay p{color:rgba(255,255,255,.75);margin:0;max-width:42ch}
+</style>
+
+<div id="app"></div>
+
+<script>
+'use strict';
+const PER=16;
+const SEATS=[{n:'Red',c:'#d7342f'},{n:'Blue',c:'#2b67c4'},{n:'Green',c:'#2f9e4f'},{n:'Yellow',c:'#e0b31d'},{n:'Purple',c:'#7b3fb3'},{n:'Orange',c:'#ef7d1a'}];
+const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const SUITS=['♠','♥','♦','♣'];
+const RANKNAME={A:'Ace',J:'Jack',Q:'Queen',K:'King'};
+let S=null;                       // game state (plain JSON)
+let ui={card:null,pawn:null,used:0,first:null,turnStart:null,confirmNew:false};
+let setup={N:6,persons:['Player 1','Player 2'],seatPerson:[0,1,0,1,0,1]};
+const app=document.getElementById('app');
+
+/* ---------- helpers ---------- */
+const clone=o=>JSON.parse(JSON.stringify(o));
+const start=s=>s*PER;
+const entry=(st,s)=>(s*PER-1+st.ring)%st.ring;
+const pawnsOf=(st,s)=>st.pawns.filter(p=>p.seat===s);
+const allHome=ps=>ps.every(p=>p.zone==='home');
+const ringAt=(st,pos)=>st.pawns.find(p=>p.zone==='ring'&&p.pos===pos);
+const homeAt=(st,s,pos)=>st.pawns.find(p=>p.zone==='home'&&p.seat===s&&p.pos===pos);
+const isBlocker=p=>p.zone==='ring'&&p.pos===start(p.seat);
+const byId=(st,id)=>st.pawns.find(p=>p.id===id);
+const seatName=s=>SEATS[s].n;
+const personOf=(st,s)=>st.persons[st.seatPerson[s]];
+
+function controlled(st,seat){
+  const person=st.seatPerson[seat];
+  return st.pawns.filter(p=>st.seatPerson[p.seat]===person);
+}
+function fwd(st,p,n,enter=true){
+  if(p.zone==='nest')return null;
+  let zone=p.zone,cur=p.pos,cap=null;
+  for(let k=1;k<=n;k++){
+    if(zone==='ring'){ if(enter&&cur===entry(st,p.seat)){zone='home';cur=0;} else cur=(cur+1)%st.ring; }
+    else { cur++; if(cur>3)return null; }
+    const occ= zone==='ring'?ringAt(st,cur):homeAt(st,p.seat,cur);
+    if(occ){ if(zone==='home')return null; if(isBlocker(occ))return null; if(k===n)cap=occ; }
+  }
+  return {kind:'move',pid:p.id,to:{zone,pos:cur},cap:cap?cap.id:null,steps:n};
+}
+/* both readings of a forward move: into home, or past the entry for another lap (player's choice) */
+function fwdBoth(st,p,n){
+  const a=fwd(st,p,n,true), b=fwd(st,p,n,false), out=[];
+  if(a)out.push(a);
+  if(b&&!(a&&a.to.zone===b.to.zone&&a.to.pos===b.to.pos))out.push(b);
+  return out;
+}
+function back4(st,p){
+  if(p.zone!=='ring')return null;
+  let cur=p.pos,cap=null;
+  for(let k=1;k<=4;k++){
+    cur=(cur-1+st.ring)%st.ring;
+    const occ=ringAt(st,cur);
+    if(occ){ if(isBlocker(occ))return null; if(k===4)cap=occ; }
+  }
+  return {kind:'move',pid:p.id,to:{zone:'ring',pos:cur},cap:cap?cap.id:null,steps:-4};
+}
+function startMove(st,p){
+  if(p.zone!=='nest')return null;
+  const dest=start(p.seat), occ=ringAt(st,dest);
+  if(occ&&occ.seat===p.seat)return null;
+  return {kind:'move',pid:p.id,to:{zone:'ring',pos:dest},cap:occ?occ.id:null,steps:0};
+}
+function apply(st,m){
+  const n=clone(st);
+  if(m.kind==='move'){
+    if(m.cap!=null){ const c=byId(n,m.cap); c.zone='nest'; c.pos=c.id%4; }
+    const p=byId(n,m.pid); p.zone=m.to.zone; p.pos=m.to.pos;
+  } else if(m.kind==='swap'){
+    const a=byId(n,m.a), b=byId(n,m.b); const t=a.pos; a.pos=b.pos; b.pos=t;
+  }
+  return n;
+}
+function swapTargets(st,a){
+  if(a.zone!=='ring'||isBlocker(a))return [];
+  return st.pawns.filter(b=>st.seatPerson[b.seat]!==st.seatPerson[a.seat]&&b.zone==='ring'&&!isBlocker(b));
+}
+function jackSources(st,seat){ return controlled(st,seat).filter(a=>swapTargets(st,a).length>0); }
+
+/* options for one pawn with a card; remaining = steps left for the 7 */
+function pawnOptions(st,seat,r,p,used){
+  const o=[];
+  const push=m=>{ if(m)o.push(m); };
+  if(r==='A'){ push(startMove(st,p)); fwdBoth(st,p,1).forEach(push); }
+  else if(r==='K'){ push(startMove(st,p)); }
+  else if(r==='Q'){ fwdBoth(st,p,12).forEach(push); }
+  else if(r==='4'){ push(back4(st,p)); }
+  else if(r==='7'){
+    const rem=7-used;
+    for(let k=1;k<=rem;k++){
+      for(const m of fwdBoth(st,p,k)){
+        if(k===rem){o.push(m);continue;}
+        // the rest must be playable by a *different* pawn afterwards
+        const after=apply(st,m);
+        const ok=controlled(after,seat).some(b=>b.id!==p.id&&fwdBoth(after,b,rem-k).length);
+        if(ok)o.push(m);
+      }
+    }
+  }
+  else fwdBoth(st,p,parseInt(r,10)).forEach(push);
+  return o;
+}
+function cardPlayable(st,seat,card){
+  const r=card.r;
+  if(r==='J')return jackSources(st,seat).length>0;
+  return controlled(st,seat).some(p=>pawnOptions(st,seat,r,p,0).length>0);
+}
+function personWon(st,seat){
+  const person=st.seatPerson[seat];
+  for(let s=0;s<st.N;s++) if(st.seatPerson[s]===person&&!allHome(pawnsOf(st,s)))return false;
+  return true;
+}
+
+/* ---------- game flow ---------- */
+function buildDeck(N){
+  const d=[]; let k=0;
+  while(d.length<13*N){ const s=SUITS[k%4]; RANKS.forEach(r=>d.push({r,s})); k++; }
+  for(let i=d.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [d[i],d[j]]=[d[j],d[i]]; }
+  return d;
+}
+function deal(){
+  const size=[5,4,4][S.dealNo%3];
+  if(S.deck.length<size*S.N){ S.deck=buildDeck(S.N); S.discard=[]; }
+  S.hands=[]; for(let s=0;s<S.N;s++)S.hands.push(S.deck.splice(0,size));
+  S.dealNo++;
+  log(-1,`New round: ${size} cards per colour (${personOf(S,S.dealer)} deals).`);
+  if(S.dealNo%3===0)S.dealer=(S.dealer+1)%S.N;
+}
+function log(seat,text){ S.log.unshift({seat,text}); if(S.log.length>40)S.log.length=40; }
+function newGame(cfg){
+  const N=cfg.N, pawns=[];
+  for(let s=0;s<N;s++)for(let i=0;i<4;i++)pawns.push({id:s*4+i,seat:s,zone:'nest',pos:i});
+  S={N,ring:PER*N,persons:cfg.persons.slice(),seatPerson:cfg.seatPerson.slice(0,N),pawns,hands:[],deck:[],discard:[],
+     dealer:N-1,dealNo:0,turn:0,phase:'play',log:[],winner:null,lastPerson:null,msg:''};
+  deal();
+  S.turn=(S.dealer+1)%N;
+  beginTurn(true);
+}
+function beginTurn(initial){
+  ui.card=null;ui.pawn=null;ui.used=0;ui.first=null;ui.turnStart=null;
+  const person=S.seatPerson[S.turn];
+  const distinct=new Set(S.seatPerson).size>1;
+  if(distinct&&(initial||S.lastPerson!==person))S.phase='handoff'; else S.phase='play';
+  S.lastPerson=person;
+  if(S.phase==='play')startPlay();
+  save();render();
+}
+const seatsOf=person=>Array.from({length:S.N},(_,s)=>s).filter(s=>S.seatPerson[s]===person);
+const seatPlayable=s=>S.hands[s].some(c=>cardPlayable(S,s,c));
+function startPlay(){
+  S.phase='play'; ui.turnStart=null;
+  if(!seatPlayable(S.turn)){
+    const alt=seatsOf(S.seatPerson[S.turn]).find(s=>s!==S.turn&&seatPlayable(s));
+    if(alt!=null)S.turn=alt; else S.phase='nocard';
+  }
+  ui.turnStart=clone(S);
+}
+function switchSeat(s){
+  if(S.phase!=='play'||ui.card!=null||S.seatPerson[s]!==S.seatPerson[S.turn]||!S.hands[s].length)return;
+  S.turn=s; ui.turnStart=clone(S); save(); render();
+}
+function discardAll(){
+  const person=S.seatPerson[S.turn]; let n=0;
+  for(const s of seatsOf(person)){ n+=S.hands[s].length; S.discard.push(...S.hands[s]); S.hands[s]=[]; }
+  log(S.turn,`${personOf(S,S.turn)} has no move and discards ${n} card${n===1?'':'s'}.`);
+  nextTurn();
+}
+function finishMove(desc){
+  const card=S.hands[S.turn].splice(ui.card,1)[0];
+  S.discard.push(card);
+  log(S.turn,`${seatName(S.turn)} plays ${cardLabel(card)}: ${desc}`);
+  ui.card=null;ui.pawn=null;ui.used=0;ui.first=null;
+  if(personWon(S,S.turn)){ S.phase='over'; S.winner=S.seatPerson[S.turn]; log(-1,`${personOf(S,S.turn)} wins!`); save();render();return; }
+  S.phase='moved'; S.msg=`${cardLabel(card)}: ${desc}`; save(); render();
+}
+function nextTurn(){
+  const P=S.persons.length, cur=S.seatPerson[S.turn];
+  let n=null;
+  for(let i=1;i<=P;i++){ const q=(cur+i)%P; const seat=seatsOf(q).find(s=>S.hands[s].length); if(seat!=null){n=seat;break;} }
+  if(n==null){ deal(); n=(S.dealer+1)%S.N; }
+  S.turn=n; beginTurn(false);
+}
+function cardLabel(c){ return (RANKNAME[c.r]||c.r)+c.s; }
+function cancelChoice(){ if(ui.turnStart){ const ts=ui.turnStart; S=clone(ts); ui.turnStart=ts; } ui.card=null;ui.pawn=null;ui.used=0;ui.first=null; render(); }
+
+/* ---------- interaction ---------- */
+function selectCard(i){
+  if(S.phase!=='play')return;
+  if(ui.card===i){cancelChoice();return;}
+  if(ui.used>0)return; // mid-7: don't switch
+  const c=S.hands[S.turn][i]; if(!cardPlayable(S,S.turn,c))return;
+  ui.card=i; ui.pawn=null; render();
+}
+function selectablePawns(){
+  if(ui.card==null)return [];
+  const r=S.hands[S.turn][ui.card].r;
+  if(r==='J'){
+    if(ui.pawn==null)return jackSources(S,S.turn).map(p=>p.id);
+    return swapTargets(S,byId(S,ui.pawn)).map(p=>p.id);
+  }
+  return controlled(S,S.turn).filter(p=>p.id!==ui.first&&pawnOptions(S,S.turn,r,p,ui.used).length>0).map(p=>p.id);
+}
+function currentOptions(){
+  if(ui.card==null||ui.pawn==null)return [];
+  const r=S.hands[S.turn][ui.card].r; if(r==='J')return [];
+  return pawnOptions(S,S.turn,r,byId(S,ui.pawn),ui.used);
+}
+function clickPawn(id){
+  if(S.phase!=='play'||ui.card==null)return;
+  const r=S.hands[S.turn][ui.card].r;
+  const sel=selectablePawns();
+  if(r==='J'&&ui.pawn!=null&&sel.includes(id)){
+    const a=byId(S,ui.pawn), b=byId(S,id);
+    S=apply(S,{kind:'swap',a:a.id,b:b.id});
+    finishMove(`swaps ${seatName(a.seat)} with ${seatName(b.seat)}.`); return;
+  }
+  if(sel.includes(id)){ ui.pawn=id; render(); return; }
+  if(ui.pawn===id&&ui.used===0){ ui.pawn=null; render(); }
+}
+function clickDest(zone,pos){
+  const opts=currentOptions();
+  const m=opts.find(o=>o.to.zone===zone&&o.to.pos===pos); if(!m)return;
+  const p=byId(S,ui.pawn), r=S.hands[S.turn][ui.card].r;
+  const capTxt=m.cap!=null?` and captures ${seatName(byId(S,m.cap).seat)}`:'';
+  S=apply(S,m);
+  if(r==='7'){
+    ui.used+=m.steps;
+    const part=`${seatName(p.seat)} ${m.steps} forward${capTxt}`;
+    if(ui.used<7){ ui.first=p.id; ui.pawn=null; ui.part=part; render(); return; }
+    finishMove((ui.part?ui.part+', ':'')+part+'.'); ui.part=null; return;
+  }
+  let desc;
+  if(m.steps===0)desc=`puts a ${seatName(p.seat)} pawn on its start${capTxt}.`;
+  else if(m.steps<0)desc=`${seatName(p.seat)} 4 back${capTxt}.`;
+  else if(m.to.zone==='home'&&p.zone!=='home')desc=`${seatName(p.seat)} ${m.steps} forward, into home.`;
+  else desc=`${seatName(p.seat)} ${m.steps} forward${capTxt}.`;
+  finishMove(desc);
+}
+
+/* ---------- persistence ---------- */
+function save(){ try{ localStorage.setItem('keezen-v5',JSON.stringify(S)); }catch(e){} }
+function loadSaved(){ try{ const s=localStorage.getItem('keezen-v5'); return s?JSON.parse(s):null; }catch(e){return null;} }
+
+/* ---------- rendering ---------- */
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function render(){ if(!S)renderSetup(); else renderGame(); }
+
+function renderSetup(){
+  const saved=loadSaved();
+  const persons=setup.persons;
+  app.innerHTML=`<div class="setup">
+    <div><div class="eyebrow">Hot-seat on one laptop</div><h1>Keezen</h1>
+    <p>Pick the board, who is playing and which colour belongs to whom. When a colour owned by someone else is up, the app hides the cards until that person has the laptop and presses the button.</p></div>
+    ${saved&&saved.phase!=='over'?`<div class="row"><button class="primary" id="resume">Continue the saved game</button><span class="hint">Turn: ${esc(SEATS[saved.turn].n)} (${esc(saved.persons[saved.seatPerson[saved.turn]])})</span></div>`:''}
+    <fieldset><legend>Board</legend><div class="row">
+      <label><input type="radio" name="N" value="4" ${setup.N===4?'checked':''}> 4 colours (64 spaces)</label>
+      <label><input type="radio" name="N" value="6" ${setup.N===6?'checked':''}> 6 colours (96 spaces)</label></div></fieldset>
+    <fieldset><legend>Players</legend>
+      <div id="persons" style="display:grid;gap:8px">${persons.map((p,i)=>`<div class="row"><input id="person${i}" data-i="${i}" value="${esc(p)}" maxlength="18"> ${persons.length>1?`<button class="ghost" data-del="${i}">Remove</button>`:''}</div>`).join('')}</div>
+      <div class="row">${persons.length<6?'<button id="addPerson">+ Player</button>':''}</div></fieldset>
+    <fieldset><legend>Who plays which colour</legend>
+      <div style="display:grid;gap:8px">${Array.from({length:setup.N},(_,s)=>`<div class="seatrow"><span class="chip"><span class="dot" style="background:${SEATS[s].c}"></span>${SEATS[s].n}</span>
+        <select id="seat${s}" data-s="${s}">${persons.map((p,i)=>`<option value="${i}" ${setup.seatPerson[s]===i?'selected':''}>${esc(p)}</option>`).join('')}</select></div>`).join('')}</div>
+      <p class="hint">Colours owned by the same person form one team: each colour gets its own hand, but a card may move any pawn of that person. You win when all your colours are home.</p></fieldset>
+    <div class="row"><button class="primary" id="startBtn" style="font-size:17px">Start the game</button></div>
+  </div>`;
+  app.querySelectorAll('input[name=N]').forEach(r=>r.onchange=()=>{setup.N=+r.value;normalizeAssign();renderSetup();});
+  app.querySelectorAll('#persons input').forEach(inp=>inp.onchange=()=>{setup.persons[+inp.dataset.i]=inp.value.trim()||`Player ${+inp.dataset.i+1}`;});
+  app.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{setup.persons.splice(+b.dataset.del,1);normalizeAssign();renderSetup();});
+  const add=document.getElementById('addPerson'); if(add)add.onclick=()=>{setup.persons.push(`Player ${setup.persons.length+1}`);normalizeAssign();renderSetup();};
+  app.querySelectorAll('select[data-s]').forEach(sel=>sel.onchange=()=>{setup.seatPerson[+sel.dataset.s]=+sel.value;});
+  document.getElementById('startBtn').onclick=()=>{ app.querySelectorAll('#persons input').forEach(inp=>{setup.persons[+inp.dataset.i]=inp.value.trim()||`Player ${+inp.dataset.i+1}`;}); newGame(setup); };
+  const res=document.getElementById('resume'); if(res)res.onclick=()=>{S=saved; if(S.phase==='play'||S.phase==='nocard'){S.phase='play';startPlay();} render();};
+}
+function normalizeAssign(){ for(let s=0;s<6;s++){ if(setup.seatPerson[s]==null||setup.seatPerson[s]>=setup.persons.length)setup.seatPerson[s]=s%setup.persons.length; } }
+
+function renderGame(){
+  const seat=S.turn, person=personOf(S,seat);
+  if(S.phase==='handoff'){
+    app.innerHTML=`<div class="overlay"><div class="inner">
+      <div class="eyebrow">Pass the laptop to</div><h2>${esc(person)}</h2>
+      <div class="seat"><span class="dot" style="background:${SEATS[seat].c}"></span>${SEATS[seat].n} is up</div>
+      <button id="reveal">I am ${esc(person)}, show my cards</button>
+      <p>The previous player looks away. The cards only appear after this button.</p></div></div>`;
+    document.getElementById('reveal').onclick=()=>{startPlay();save();render();};
+    return;
+  }
+  const hand=S.hands[seat]||[];
+  const card=ui.card!=null?hand[ui.card]:null;
+  let msg='',strong=false;
+  if(S.phase==='over')msg=`${esc(S.persons[S.winner])} wins!`,strong=true;
+  else if(S.phase==='nocard')msg='None of your colours has a playable card. By the rules you discard all your cards.',strong=true;
+  else if(S.phase==='moved')msg=`Played ${esc(S.msg)}`,strong=true;
+  else if(!card)msg='Pick a card you can play.';
+  else if(card.r==='J'&&ui.pawn==null)msg='Jack: click the pawn of yours you want to swap.';
+  else if(card.r==='J')msg='Click the pawn to swap with.';
+  else if(card.r==='7'&&ui.pawn==null)msg=ui.used?`${7-ui.used} steps left: pick a different pawn.`:'Seven: pick a pawn. You may split the 7 over two pawns.';
+  else if(card.r==='7')msg='Click the space this pawn moves to (the number is the step count).';
+  else if(ui.pawn==null)msg='Click the pawn you want to move.';
+  else msg='Click the highlighted space to make the move.';
+
+  app.innerHTML=`<div class="game">
+    <div class="boardwrap">${boardSVG()}<div class="wm">brondijk.xyz</div></div>
+    <div class="rail">
+      <div class="turnbox">
+        <div class="eyebrow">Current turn</div>
+        <div class="who"><span class="dot" style="background:${SEATS[seat].c}"></span>${SEATS[seat].n} <span style="font-weight:500;color:var(--muted)">· ${esc(person)}</span></div>
+        <div class="msg ${strong?'strong':''}">${msg}</div>
+      </div>
+      <div>
+        ${seatsOf(S.seatPerson[seat]).length>1?`<div class="tabs">${seatsOf(S.seatPerson[seat]).map(s=>`<button class="tab ${s===seat?'on':''}" data-seat="${s}" ${(S.phase==='play'&&ui.card==null&&S.hands[s].length)||s===seat?'':'disabled'}><span class="dot" style="background:${SEATS[s].c}"></span>${SEATS[s].n} <span class="cnt">${S.hands[s].length}</span></button>`).join('')}</div>`:''}
+        <div class="eyebrow" style="margin-bottom:6px">${SEATS[seat].n}\u2019s cards</div>
+        <div class="hand">${hand.map((c,i)=>{
+          const ok=S.phase==='play'&&cardPlayable(S,seat,c);
+          return `<button class="card ${c.s==='♥'||c.s==='♦'?'r':'b'} ${ok?'playable':''} ${ui.card===i?'sel':''}" data-card="${i}" ${ok?'':'disabled'} title="${esc(cardHelp(c.r))}"><span class="corner">${c.r}</span>${c.r}<span class="suit">${c.s}</span></button>`;}).join('')}</div>
+        ${card?`<div class="hint" style="margin-top:6px">${esc(cardHelp(card.r))}</div>`:''}
+      </div>
+      <div class="actions">
+        ${S.phase==='nocard'?'<button class="primary" id="discard">Discard cards, next turn</button>':''}
+        ${S.phase==='moved'?'<button class="primary" id="nextturn">Next player →</button>':''}
+        ${S.phase==='play'&&ui.card!=null?'<button id="cancel">Undo choice</button>':''}
+        ${S.phase==='over'?'<button class="primary" id="newgame">New game</button>':`<button class="ghost" id="newgame">${ui.confirmNew?'Sure? Click again':'New game'}</button>`}
+      </div>
+      <table class="homes">${Array.from({length:S.N},(_,s)=>`<tr><td><span class="chip"><span class="dot" style="background:${SEATS[s].c}"></span>${SEATS[s].n}</span></td><td>${esc(personOf(S,s))}</td><td>${pawnsOf(S,s).filter(p=>p.zone==='home').length}/4 home</td></tr>`).join('')}</table>
+      <div class="log">${S.log.slice(0,10).map(l=>`<div>${l.seat>=0?`<span class="dot" style="background:${SEATS[l.seat].c}"></span>`:''}<span>${esc(l.text)}</span></div>`).join('')||'<span class="hint">No moves yet.</span>'}</div>
+      <details><summary>Rules in short</summary><ul>
+        <li>Ace: pawn onto start or 1 forward. King: pawn onto start. Queen: 12 forward.</li>
+        <li>Jack: swap one of your pawns with a pawn of another colour. Never a pawn standing on its own start.</li>
+        <li>7: seven steps in total, split over one or two pawns. All seven must be used.</li>
+        <li>4: four steps back (never into home). 2, 3, 5, 6, 8, 9, 10: that many forward.</li>
+        <li>A pawn on its own start blocks: nobody may pass it, land on it or swap with it.</li>
+        <li>Landing exactly on a pawn sends it back to the nest (your own pawns included).</li>
+        <li>Passing your entry you choose: into home (exact count needed, no overtaking, no moving back) or another lap round the board.</li>
+        <li>You must play if you can. If no card is playable, you discard your whole hand.</li>
+        <li>Round 1: 5 cards, then 4 and 4. All colours of one person play as one team: on your turn you pick which colour's hand to play from, and any card may move any of your pawns.</li>
+      </ul></details>
+    </div></div>`;
+  app.querySelectorAll('[data-card]').forEach(b=>b.onclick=()=>selectCard(+b.dataset.card));
+  app.querySelectorAll('[data-seat]').forEach(b=>b.onclick=()=>switchSeat(+b.dataset.seat));
+  const d=document.getElementById('discard'); if(d)d.onclick=discardAll;
+  const nt=document.getElementById('nextturn'); if(nt)nt.onclick=nextTurn;
+  const c=document.getElementById('cancel'); if(c)c.onclick=cancelChoice;
+  document.getElementById('newgame').onclick=()=>{ if(S.phase==='over'||ui.confirmNew){ ui.confirmNew=false; S=null; try{localStorage.removeItem('keezen-v5');}catch(e){} render(); } else { ui.confirmNew=true; render(); setTimeout(()=>{if(ui.confirmNew){ui.confirmNew=false;if(S)render();}},4000); } };
+  const svg=app.querySelector('svg.board');
+  svg.addEventListener('click',e=>{
+    const pw=e.target.closest('[data-pid]'); if(pw){clickPawn(+pw.dataset.pid);return;}
+    const f=e.target.closest('[data-dz]'); if(f){clickDest(f.dataset.dz,+f.dataset.dp);}
+  });
+}
+function cardHelp(r){
+  return {A:'Ace: put a pawn on your start or move 1 forward.',K:'King: move a pawn from the nest onto your start.',Q:'Queen: 12 steps forward.',
+    J:'Jack: swap one of your pawns with a pawn of another colour (not from or onto an own start).',
+    7:'Seven: 7 steps, split over one or two pawns.',4:'Four: 4 steps back.'}[r]||`${r} steps forward.`;
+}
+
+/* geometry: Dutch tea-towel board, white dots on blue check, Delft-blue centre */
+function boardSVG(){
+  const VB=1000,C=500,R=385,A=22, ring=S.ring;
+  const rfScale=1.12;
+  const ang=pos=>(pos/ring)*Math.PI*2-Math.PI/2;
+  const wave=a=>R+A*Math.cos(S.N*(a+Math.PI/2));      // bulges outward at every start
+  const rf=Math.min(14.5,(2*Math.PI*R/ring)*0.46);
+  const xy=(r,a)=>[C+r*Math.cos(a),C+r*Math.sin(a)];
+  const fieldXY=pos=>xy(wave(ang(pos)),ang(pos));
+  const homeXY=(s,i)=>xy(wave(ang(start(s)))-34-30*i,ang(start(s))-Math.PI/ring);
+  const nestXY=(s,i)=>{const r=wave(ang(start(s)))+44+30*(i>>1);return xy(r,ang(start(s))+((i%2)?1:-1)*17/r);};
+  const sel=new Set(selectablePawns());
+  const opts=currentOptions();
+  const optMap=new Map(opts.map(o=>[o.to.zone+':'+o.to.pos,o]));
+  const card=ui.card!=null?S.hands[S.turn][ui.card]:null;
+  const isJackTarget=card&&card.r==='J'&&ui.pawn!=null;
+  const f=n=>n.toFixed(1);
+  const dot=(x,y,r,ringCol,attrs='')=>`<g ${attrs}>${ringCol?`<circle cx="${f(x)}" cy="${f(y)}" r="${f(r+3.5)}" fill="${ringCol}"/>`:''}<circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="url(#dot)" stroke="#3a6490" stroke-width="1.6"/></g>`;
+  let out=`<svg class="board" viewBox="0 0 ${VB} ${VB}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Keezen board"><defs>
+    <pattern id="check" width="64" height="64" patternUnits="userSpaceOnUse">
+      <rect width="64" height="64" fill="#7fa6cc"/>
+      <rect width="32" height="32" fill="#eef3f8"/><rect x="32" y="32" width="32" height="32" fill="#eef3f8"/>
+      <rect x="32" width="32" height="32" fill="#b6cde3"/><rect y="32" width="32" height="32" fill="#b6cde3"/>
+      <path d="M0 8h64M0 24h64M0 40h64M0 56h64M8 0v64M24 0v64M40 0v64M56 0v64" stroke="rgba(255,255,255,.22)" stroke-width="2"/>
+    </pattern>
+    <radialGradient id="dot" cx="38%" cy="32%" r="72%"><stop offset="0" stop-color="#ffffff"/><stop offset=".7" stop-color="#f6f8fb"/><stop offset="1" stop-color="#cfdae6"/></radialGradient>
+    <radialGradient id="shine" cx="35%" cy="30%" r="70%"><stop offset="0" stop-color="#fff" stop-opacity=".75"/><stop offset=".45" stop-color="#fff" stop-opacity=".05"/><stop offset="1" stop-color="#000" stop-opacity=".35"/></radialGradient>
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="1.5" dy="3" stdDeviation="2" flood-color="#000" flood-opacity=".5"/></filter>
+    <filter id="cloth" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity=".45"/></filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#0b3560" flood-opacity=".55"/></filter>
+  </defs>
+    <rect x="6" y="6" width="988" height="988" rx="10" fill="url(#check)" filter="url(#cloth)"/>
+    <rect x="6" y="6" width="988" height="988" rx="10" fill="none" stroke="#1d5f9c" stroke-width="6"/>
+    <rect x="18" y="18" width="964" height="964" rx="6" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="3"/>
+    <g transform="translate(870 952)"><rect x="-64" y="-15" width="128" height="30" rx="3" fill="#f6f8fb" stroke="#3a6490" stroke-width="1.5"/><text text-anchor="middle" dominant-baseline="middle" font-family="var(--display)" font-weight="700" font-size="15" fill="#2a4f78" letter-spacing=".04em">brondijk.xyz</text></g>`;
+  // track: connecting line under the dots
+  let path='';
+  for(let pos=0;pos<=ring;pos++){const [x,y]=fieldXY(pos%ring);path+=(pos?'L':'M')+f(x)+' '+f(y);}
+  out+=`<path d="${path}Z" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="${rf*1.3}" stroke-linejoin="round"/>`;
+  // ring dots
+  for(let pos=0;pos<ring;pos++){
+    const [x,y]=fieldXY(pos); const st=pos%PER===0?pos/PER:-1;
+    const o=optMap.get('ring:'+pos);
+    out+=dot(x,y,rf,st>=0?SEATS[st].c:null,`filter="url(#soft)" ${o?`data-dz="ring" data-dp="${pos}" class="dest"`:''}`);
+    if(o)out+=`<circle class="hl ${o.cap!=null?'cap':''}" cx="${f(x)}" cy="${f(y)}" r="${f(rf+5)}"/>`;
+  }
+  // home + nest dots
+  for(let s=0;s<S.N;s++){
+    const [ex,ey]=fieldXY(entry(S,s)), [h3x,h3y]=homeXY(s,3);
+    out+=`<line x1="${f(ex)}" y1="${f(ey)}" x2="${f(h3x)}" y2="${f(h3y)}" stroke="rgba(255,255,255,.7)" stroke-width="${rf*1.3}" stroke-linecap="round"/>`;
+    for(let i=0;i<4;i++){
+      const [x,y]=homeXY(s,i); const o=optMap.get('home:'+i);
+      const mine=ui.pawn!=null&&byId(S,ui.pawn).seat===s&&o;
+      out+=dot(x,y,rf*0.9,SEATS[s].c,`filter="url(#soft)" ${mine?`data-dz="home" data-dp="${i}" class="dest"`:''}`);
+      if(mine)out+=`<circle class="hl" cx="${f(x)}" cy="${f(y)}" r="${f(rf*0.9+5)}"/>`;
+      const [nx,ny]=nestXY(s,i);
+      out+=dot(nx,ny,rf*0.8,SEATS[s].c,'filter="url(#soft)"');
+    }
+    const [lx,ly]=xy(wave(ang(start(s)))+82,ang(start(s))-Math.PI/ring*2.6);
+    out+=`<text x="${f(lx)}" y="${f(ly)}" text-anchor="middle" dominant-baseline="middle" font-family="var(--display)" font-weight="700" font-size="14" fill="#0b3560" stroke="#fff" stroke-width="3" paint-order="stroke">${SEATS[s].n}</text>`;
+  }
+  // pawns (3D discs)
+  for(const p of S.pawns){
+    let x,y;
+    if(p.zone==='ring')[x,y]=fieldXY(p.pos); else if(p.zone==='home')[x,y]=homeXY(p.seat,p.pos); else [x,y]=nestXY(p.seat,p.id%4);
+    const cls=['pawn']; if(sel.has(p.id))cls.push(isJackTarget?'target':'can'); if(ui.pawn===p.id)cls.push('sel');
+    const r=rf*0.85;
+    out+=`<g data-pid="${p.id}" class="${cls.join(' ')}" filter="url(#shadow)">
+      <circle cx="${f(x)}" cy="${f(y+r*0.35)}" r="${f(r)}" fill="${SEATS[p.seat].c}" style="filter:brightness(.55)"/>
+      <circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="${SEATS[p.seat].c}"/>
+      <circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="url(#shine)"/>
+      <circle class="rim" cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="none"/>
+      ${isBlocker(p)?`<circle cx="${f(x)}" cy="${f(y)}" r="${f(r*0.3)}" fill="#fff" opacity=".9" pointer-events="none"/>`:''}</g>`;
+  }
+  // step labels for the 7
+  if(card&&card.r==='7'){
+    for(const o of opts){ const [x,y]=o.to.zone==='ring'?fieldXY(o.to.pos):homeXY(byId(S,ui.pawn).seat,o.to.pos);
+      out+=`<text class="steplbl" x="${f(x)}" y="${f(y+rf+16)}" text-anchor="middle">${o.steps}</text>`; }
+  }
+  // centre: Delft-blue plate with discard pile + deck count
+  const top=S.discard[S.discard.length-1];
+  out+=`<g font-family="var(--display)" text-anchor="middle">
+    <circle cx="${C}" cy="${C}" r="118" fill="#f4f7fb" stroke="#1d5f9c" stroke-width="5" filter="url(#soft)"/>
+    <circle cx="${C}" cy="${C}" r="106" fill="none" stroke="#2f7fc6" stroke-width="2" stroke-dasharray="3 5"/>
+    <circle cx="${C}" cy="${C}" r="98" fill="none" stroke="#1d5f9c" stroke-width="1.5"/>
+    <text x="${C}" y="${C-66}" font-size="22" font-weight="800" fill="#1d5f9c" font-style="italic">Keezen</text>
+    <rect x="${C-37}" y="${C-45}" width="68" height="96" rx="7" fill="#c9d7e6"/>
+    <rect x="${C-34}" y="${C-48}" width="68" height="96" rx="7" fill="#fbfaf4" stroke="#b9c0b2"/>
+    ${top?`<text x="${C}" y="${C+12}" font-size="34" font-weight="800" fill="${top.s==='♥'||top.s==='♦'?'#c0282b':'#1d2126'}">${top.r}${top.s}</text>`:`<text x="${C}" y="${C+8}" font-size="14" fill="#6b7568">discard pile</text>`}
+    <text x="${C}" y="${C+78}" font-size="14" fill="#1d5f9c">deck: ${S.deck.length}</text></g></svg>`;
+  return out;
+}
+
+/* boot */
+function boot(data){
+  if(data&&data.S){S=data.S;ui=Object.assign(ui,data.ui||{});}
+  normalizeAssign(); render();
+}
+if(window.claude&&window.claude.hot){
+  try{ window.claude.hot.snapshot(()=>({S,ui})); }catch(e){}
+  if(window.claude.hot.ready) window.claude.hot.ready(boot); else boot(window.claude.hot.data||{});
+} else boot({});
+</script>
